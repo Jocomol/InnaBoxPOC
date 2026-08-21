@@ -52,6 +52,7 @@ data class ShoppingItem(
     val sku: String,
     val name: String,
     val concept: String,
+    val originCountry: String?,
     val packageSize: Quantity,
     val packageCount: Int,
     val requiredQuantity: Quantity,

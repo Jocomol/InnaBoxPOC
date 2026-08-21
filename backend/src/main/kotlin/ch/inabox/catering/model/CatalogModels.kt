@@ -21,6 +21,19 @@ data class TemplateRequirement(
     val required: Boolean = true,
 )
 
+@Document("planningPriorities")
+data class PlanningPriority(
+    @Id @get:JsonIgnore val mongoId: ObjectId? = null,
+    @Field("id") @get:JsonProperty("id") val priorityId: String,
+    val label: String,
+    val description: String,
+    val displayOrder: Int = 0,
+    val defaultWeight: Double = 0.0,
+    val scale: String = "continuous",
+    val lowLabel: String? = null,
+    val highLabel: String? = null,
+)
+
 @Document("eventTemplates")
 data class EventTemplate(
     @Id @get:JsonIgnore val mongoId: ObjectId? = null,
@@ -76,6 +89,7 @@ data class Product(
     val sku: String,
     val name: String,
     val concept: String,
+    val originCountry: String? = null,
     @Field("package") @get:JsonProperty("package") val packageInfo: PackageInfo,
     val price: Money,
     val capabilities: Set<String> = emptySet(),

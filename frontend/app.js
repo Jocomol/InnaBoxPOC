@@ -1,4 +1,11 @@
-const state = { templates: [], meals: [], requiredMealIds: new Set() };
+const state = {
+  templates: [],
+  meals: [],
+  products: [],
+  priorities: [],
+  requiredMealIds: new Set(),
+  catalogType: 'meals'
+};
 const form = document.querySelector('#planner-form');
 const templateSelect = document.querySelector('#template');
 const requiredMealSelect = document.querySelector('#required-meal-select');
@@ -8,15 +15,9 @@ const inventoryRows = document.querySelector('#inventory-rows');
 const errorBox = document.querySelector('#form-error');
 const results = document.querySelector('#results');
 const generateButton = document.querySelector('#generate');
-
-const weightLabels = {
-  price: 'Value',
-  swiss: 'Swiss origin',
-  presentation: 'Presentation',
-  prepEase: 'Prep ease',
-  sustainability: 'Sustainability',
-  quality: 'Quality'
-};
+const catalogSearch = document.querySelector('#catalog-search');
+const catalogCapability = document.querySelector('#catalog-capability');
+const catalogResults = document.querySelector('#catalog-results');
 
 document.querySelector('#add-inventory').addEventListener('click', () => addInventoryRow());
 document.querySelector('#back-to-form').addEventListener('click', () => {
@@ -29,17 +30,36 @@ requiredMealSelect.addEventListener('change', () => {
   renderRequiredMeals();
 });
 form.addEventListener('submit', resolvePlan);
+catalogSearch.addEventListener('input', renderCatalog);
+catalogCapability.addEventListener('change', renderCatalog);
+document.querySelectorAll('[data-catalog-type]').forEach(button => {
+  button.addEventListener('click', () => {
+    state.catalogType = button.dataset.catalogType;
+    document.querySelectorAll('[data-catalog-type]').forEach(tab => {
+      const selected = tab === button;
+      tab.classList.toggle('active', selected);
+      tab.setAttribute('aria-selected', String(selected));
+    });
+    catalogSearch.placeholder = state.catalogType === 'meals'
+      ? 'Search name, ID, ingredient…'
+      : 'Search name, SKU, concept…';
+    renderCatalogCapabilities();
+    renderCatalog();
+  });
+});
 
 const shareInput = document.querySelector('#vegetarian-share');
 shareInput.addEventListener('input', () => {
   document.querySelector('#vegetarian-share-value').value = `${Math.round(Number(shareInput.value) * 100)}%`;
 });
 
-async function loadTemplates() {
+async function loadCatalog() {
   try {
-    [state.templates, state.meals] = await Promise.all([
+    [state.templates, state.meals, state.products, state.priorities] = await Promise.all([
       fetchJson('/api/templates'),
-      fetchJson('/api/meals')
+      fetchJson('/api/meals'),
+      fetchJson('/api/products'),
+      fetchJson('/api/priorities')
     ]);
     templateSelect.innerHTML = state.templates
       .map(template => `<option value="${escapeHtml(template.id)}">${escapeHtml(template.name)}</option>`)
@@ -47,7 +67,11 @@ async function loadTemplates() {
     templateSelect.disabled = false;
     const preferred = state.templates.find(template => template.id === 'business-apero');
     if (preferred) templateSelect.value = preferred.id;
+    document.querySelector('#meal-count').textContent = state.meals.length;
+    document.querySelector('#product-count').textContent = state.products.length;
     renderRequiredMeals();
+    renderCatalogCapabilities();
+    renderCatalog();
     applyTemplate();
     addInventoryRow({ concept: 'mini-spinach-quiche', amount: 40, unit: 'piece' });
   } catch (error) {
@@ -97,12 +121,18 @@ function applyTemplate() {
 }
 
 function renderWeights(weights) {
-  document.querySelector('#weights').innerHTML = Object.entries(weights).map(([key, value]) => `
+  document.querySelector('#weights').innerHTML = configuredPriorities(weights).map(priority => {
+    const value = clamp(Number(weights[priority.id] ?? priority.defaultWeight ?? 0), 0, 1);
+    const descriptionId = `priority-${priority.id.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+    return `
     <label class="weight">
-      <span class="weight-header"><strong>${escapeHtml(weightLabels[key] || key)}</strong><output>${Math.round(value * 100)}%</output></span>
-      <input class="weight-input" data-key="${escapeHtml(key)}" type="range" min="0" max="1" step="0.05" value="${value}">
+      <span class="weight-header"><strong>${escapeHtml(priority.label)}</strong><output>${Math.round(value * 100)}%</output></span>
+      <input class="weight-input" data-key="${escapeHtml(priority.id)}" type="range" min="0" max="1" step="0.05" value="${value}" aria-describedby="${escapeHtml(descriptionId)}">
+      <small id="${escapeHtml(descriptionId)}" class="weight-description">${escapeHtml(priority.description)}</small>
+      <span class="weight-scale"><i>${escapeHtml(priority.lowLabel || 'Lower')}</i><i>${escapeHtml(priority.highLabel || 'Higher')}</i></span>
     </label>
-  `).join('');
+  `;
+  }).join('');
   document.querySelectorAll('.weight-input').forEach(input => {
     input.addEventListener('input', () => {
       input.closest('.weight').querySelector('output').value = `${Math.round(Number(input.value) * 100)}%`;
@@ -224,8 +254,8 @@ function renderMeals(meals, requiredMealIds) {
       <div class="meal-meta"><span>${meal.servings} servings</span><span>${quantity(meal.targetQuantity)} target</span></div>
       <details class="score-details">
         <summary>Score components</summary>
-        <div class="score-components">${Object.entries(meal.scoreComponents).map(([key, value]) =>
-          `<span><i>${escapeHtml(weightLabels[key] || key)}</i><b>${Math.round(value * 100)}</b></span>`
+        <div class="score-components">${priorityEntries(meal.scoreComponents).map(([key, value]) =>
+          `<span><i>${escapeHtml(priorityDefinition(key).label)}</i><b>${Math.round(value * 100)}</b></span>`
         ).join('')}</div>
       </details>
     </article>
@@ -235,7 +265,7 @@ function renderMeals(meals, requiredMealIds) {
 function renderShoppingItems(items) {
   document.querySelector('#shopping-items').innerHTML = items.map(item => `
     <tr>
-      <td><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.sku)} · ${quantity(item.packageSize)} / pack</small></td>
+      <td><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.sku)}${item.originCountry ? ` · Origin ${escapeHtml(item.originCountry)}` : ''} · ${quantity(item.packageSize)} / pack</small></td>
       <td>${quantity(item.requiredQuantity)}</td>
       <td>${item.inventoryUsed.amount ? quantity(item.inventoryUsed) : '—'}</td>
       <td class="${item.packageCount === 0 ? 'covered' : ''}">${item.packageCount === 0 ? 'Covered' : item.packageCount}</td>
@@ -261,6 +291,147 @@ function renderTrace(requirements) {
   `).join('');
 }
 
+function configuredPriorities(weights) {
+  const definitions = [...state.priorities];
+  const definedIds = new Set(definitions.map(priority => priority.id));
+  Object.keys(weights || {}).forEach(id => {
+    if (!definedIds.has(id)) definitions.push(fallbackPriority(id));
+  });
+  return definitions.sort(comparePriorities);
+}
+
+function priorityDefinition(id) {
+  return state.priorities.find(priority => priority.id === id) || fallbackPriority(id);
+}
+
+function fallbackPriority(id) {
+  return {
+    id,
+    label: humanize(id),
+    description: 'Catalog-defined planning score.',
+    displayOrder: Number.MAX_SAFE_INTEGER,
+    defaultWeight: 0,
+    lowLabel: 'Lower',
+    highLabel: 'Higher'
+  };
+}
+
+function comparePriorities(left, right) {
+  return (left.displayOrder ?? 0) - (right.displayOrder ?? 0) || left.id.localeCompare(right.id);
+}
+
+function priorityEntries(scores) {
+  return Object.entries(scores || {}).sort(([left], [right]) =>
+    comparePriorities(priorityDefinition(left), priorityDefinition(right))
+  );
+}
+
+function renderCatalogCapabilities() {
+  const items = state[state.catalogType];
+  const capabilities = [...new Set(items.flatMap(item => item.capabilities || []))].sort();
+  catalogCapability.innerHTML = [
+    '<option value="">All capabilities</option>',
+    ...capabilities.map(capability => `<option value="${escapeHtml(capability)}">${escapeHtml(humanize(capability))}</option>`)
+  ].join('');
+}
+
+function renderCatalog() {
+  const items = state[state.catalogType];
+  const query = catalogSearch.value.trim().toLocaleLowerCase();
+  const capability = catalogCapability.value;
+  const filtered = items.filter(item => {
+    const matchesCapability = !capability || (item.capabilities || []).includes(capability);
+    return matchesCapability && (!query || catalogSearchText(item).includes(query));
+  });
+
+  const noun = state.catalogType === 'meals' ? 'recipe' : 'item';
+  document.querySelector('#catalog-count').textContent = `${filtered.length} ${noun}${filtered.length === 1 ? '' : 's'} shown`;
+  catalogResults.innerHTML = filtered.length
+    ? filtered.map(item => state.catalogType === 'meals' ? recipeCard(item) : productCard(item)).join('')
+    : `<div class="catalog-empty">No ${noun}s match this search and filter.</div>`;
+}
+
+function catalogSearchText(item) {
+  const ingredientConcepts = (item.ingredients || []).map(ingredient => ingredient.concept);
+  return [
+    item.id,
+    item.name,
+    item.sku,
+    item.concept,
+    item.originCountry,
+    ...(item.capabilities || []),
+    ...ingredientConcepts
+  ].filter(Boolean).join(' ').toLocaleLowerCase();
+}
+
+function recipeCard(meal) {
+  const ingredients = meal.ingredients.map(ingredient => `
+    <li><span>${escapeHtml(humanize(ingredient.concept))}</span><strong>${formatAmount(ingredient.amountPerServing)} ${escapeHtml(ingredient.unit)}</strong></li>
+  `).join('');
+  return `
+    <article class="catalog-card recipe-card">
+      <div class="catalog-card-heading">
+        <div><p>Recipe · ${escapeHtml(meal.id)}</p><h3>${escapeHtml(meal.name)}</h3></div>
+        <span>${formatAmount(meal.serving.piecesPerServing)} ${meal.serving.piecesPerServing === 1 ? 'piece' : 'pieces'} / serving</span>
+      </div>
+      ${capabilityChips(meal.capabilities)}
+      <div class="catalog-card-body">
+        <h4>Ingredients per serving</h4>
+        <ul class="ingredient-list">${ingredients}</ul>
+      </div>
+      ${catalogScores(meal.scores)}
+    </article>
+  `;
+}
+
+function productCard(product) {
+  const conversion = product.conversion
+    ? `<span>Yields ${formatAmount(product.package.amount / product.conversion.amountPerServing)} ${escapeHtml(product.conversion.servingUnit)}s</span>`
+    : '';
+  return `
+    <article class="catalog-card product-card">
+      <div class="catalog-card-heading">
+        <div><p>Item · ${escapeHtml(product.sku)}</p><h3>${escapeHtml(product.name)}</h3></div>
+        <span>${formatMoney(product.price.amount)}</span>
+      </div>
+      ${capabilityChips(product.capabilities)}
+      <dl class="product-facts">
+        <div><dt>Concept</dt><dd>${escapeHtml(humanize(product.concept))}</dd></div>
+        <div><dt>Package</dt><dd>${quantity(product.package)}</dd></div>
+        <div><dt>Origin</dt><dd>${escapeHtml(product.originCountry || 'Unspecified')}</dd></div>
+      </dl>
+      ${conversion ? `<div class="conversion-note">${conversion}</div>` : ''}
+      ${catalogScores(product.scores)}
+    </article>
+  `;
+}
+
+function capabilityChips(capabilities) {
+  return `<div class="chips catalog-chips">${(capabilities || []).map(capability =>
+    `<span class="chip">${escapeHtml(humanize(capability))}</span>`
+  ).join('')}</div>`;
+}
+
+function catalogScores(scores) {
+  const entries = priorityEntries(scores);
+  if (!entries.length) return '';
+  return `
+    <details class="catalog-scores">
+      <summary>Planning scores</summary>
+      <div class="catalog-score-list">${entries.map(([key, value]) => {
+        const priority = priorityDefinition(key);
+        const normalized = clamp(Number(value), 0, 1);
+        return `
+          <div class="catalog-score" title="${escapeHtml(priority.description)}">
+            <span><i>${escapeHtml(priority.label)}</i><b>${Math.round(normalized * 100)}</b></span>
+            <progress max="1" value="${normalized}">${Math.round(normalized * 100)}%</progress>
+          </div>
+        `;
+      }).join('')}</div>
+    </details>
+  `;
+}
+
 async function fetchJson(url, options) {
   const response = await fetch(url, options);
   const data = await response.json().catch(() => ({}));
@@ -276,10 +447,12 @@ function setLoading(loading) {
 function showError(message) { errorBox.textContent = message; errorBox.hidden = false; }
 function hideError() { errorBox.hidden = true; errorBox.textContent = ''; }
 function formatMoney(value) { return new Intl.NumberFormat('de-CH', { style: 'currency', currency: 'CHF' }).format(value); }
+function formatAmount(value) { return Number(value).toLocaleString('de-CH', { maximumFractionDigits: 3 }); }
 function quantity(value) { return `${Number(value.amount).toLocaleString('de-CH', { maximumFractionDigits: 3 })} ${value.unit}`; }
-function humanize(value) { return value.replaceAll('-', ' ').replace(/\b\w/g, letter => letter.toUpperCase()); }
+function humanize(value) { return value.replace(/([a-z])([A-Z])/g, '$1 $2').replaceAll('-', ' ').replace(/\b\w/g, letter => letter.toUpperCase()); }
+function clamp(value, minimum, maximum) { return Math.min(maximum, Math.max(minimum, value)); }
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>'"]/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[character]);
 }
 
-loadTemplates();
+loadCatalog();

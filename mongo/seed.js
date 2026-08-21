@@ -15,6 +15,60 @@ db.products.createIndex({ id: 1 }, { unique: true });
 db.products.createIndex({ sku: 1 }, { unique: true });
 db.products.createIndex({ concept: 1 });
 db.products.createIndex({ capabilities: 1 });
+db.planningPriorities.createIndex({ id: 1 }, { unique: true });
+
+const planningPriorities = [
+  {
+    id: "price",
+    label: "Affordability",
+    description: "Favors candidates that provide the required quantity at a lower comparable cost.",
+    displayOrder: 10,
+    defaultWeight: 0.20,
+    scale: "continuous",
+    lowLabel: "Premium",
+    highLabel: "Economical"
+  },
+  {
+    id: "swiss",
+    label: "Swiss origin",
+    description: "Favors Swiss-sourced products and meals whose complete ingredient list is Swiss-sourced.",
+    displayOrder: 20,
+    defaultWeight: 0.20,
+    scale: "binary",
+    lowLabel: "Non-Swiss",
+    highLabel: "Swiss"
+  },
+  {
+    id: "presentation",
+    label: "Presentation",
+    description: "Favors dishes that are visually suited to serving at the selected event.",
+    displayOrder: 30,
+    defaultWeight: 0.20,
+    scale: "continuous",
+    lowLabel: "Practical",
+    highLabel: "Showpiece"
+  },
+  {
+    id: "prepEase",
+    label: "Preparation ease",
+    description: "Favors food that needs less hands-on preparation and service-time work.",
+    displayOrder: 40,
+    defaultWeight: 0.20,
+    scale: "continuous",
+    lowLabel: "Hands-on",
+    highLabel: "Low effort"
+  },
+  {
+    id: "sustainability",
+    label: "Sustainability",
+    description: "Favors the catalog's relative estimate for lower-impact ingredients, packaging, and sourcing.",
+    displayOrder: 50,
+    defaultWeight: 0.20,
+    scale: "continuous",
+    lowLabel: "Lower priority",
+    highLabel: "Lower impact"
+  }
+];
 
 const eventTemplates = [
   {
@@ -295,7 +349,7 @@ const meals = [
       { concept: "cherry-tomato", amountPerServing: 50, unit: "g" },
       { concept: "basil", amountPerServing: 3, unit: "g" }
     ],
-    scores: { price: 0.65, swiss: 0.80, presentation: 0.90, prepEase: 0.60, sustainability: 0.75 }
+    scores: { price: 0.65, swiss: 1.00, presentation: 0.90, prepEase: 0.60, sustainability: 0.75 }
   },
   {
     id: "mini-spinach-quiche",
@@ -303,7 +357,7 @@ const meals = [
     capabilities: ["vegetarian", "savory", "finger-food", "warm", "apero"],
     serving: { piecesPerServing: 2 },
     ingredients: [{ concept: "mini-spinach-quiche", amountPerServing: 2, unit: "piece" }],
-    scores: { price: 0.75, swiss: 0.85, presentation: 0.75, prepEase: 0.90, sustainability: 0.70 }
+    scores: { price: 0.75, swiss: 1.00, presentation: 0.75, prepEase: 0.90, sustainability: 0.70 }
   },
   {
     id: "falafel-bites",
@@ -314,7 +368,7 @@ const meals = [
       { concept: "falafel", amountPerServing: 3, unit: "piece" },
       { concept: "hummus", amountPerServing: 30, unit: "g" }
     ],
-    scores: { price: 0.85, swiss: 0.30, presentation: 0.70, prepEase: 0.85, sustainability: 0.90 }
+    scores: { price: 0.85, swiss: 0.00, presentation: 0.70, prepEase: 0.85, sustainability: 0.90 }
   },
   {
     id: "ham-croissants",
@@ -322,7 +376,7 @@ const meals = [
     capabilities: ["savory", "finger-food", "warm", "apero"],
     serving: { piecesPerServing: 2 },
     ingredients: [{ concept: "mini-ham-croissant", amountPerServing: 2, unit: "piece" }],
-    scores: { price: 0.70, swiss: 0.90, presentation: 0.75, prepEase: 0.90, sustainability: 0.50 }
+    scores: { price: 0.70, swiss: 1.00, presentation: 0.75, prepEase: 0.90, sustainability: 0.50 }
   },
   {
     id: "bircher-muesli",
@@ -345,7 +399,7 @@ const meals = [
       { concept: "egg", amountPerServing: 2, unit: "piece" },
       { concept: "butter", amountPerServing: 10, unit: "g" }
     ],
-    scores: { price: 0.80, swiss: 0.90, presentation: 0.65, prepEase: 0.55, sustainability: 0.70 }
+    scores: { price: 0.80, swiss: 1.00, presentation: 0.65, prepEase: 0.55, sustainability: 0.70 }
   },
   {
     id: "fruit-salad",
@@ -353,7 +407,7 @@ const meals = [
     capabilities: ["vegan", "vegetarian", "sweet", "cold", "brunch", "prepare-ahead"],
     serving: { piecesPerServing: 1 },
     ingredients: [{ concept: "mixed-fruit", amountPerServing: 180, unit: "g" }],
-    scores: { price: 0.65, swiss: 0.45, presentation: 0.85, prepEase: 0.70, sustainability: 0.70 }
+    scores: { price: 0.65, swiss: 0.00, presentation: 0.85, prepEase: 0.70, sustainability: 0.70 }
   },
   {
     id: "apple-yogurt-parfaits",
@@ -365,7 +419,7 @@ const meals = [
       { concept: "yogurt", amountPerServing: 100, unit: "g" },
       { concept: "apple", amountPerServing: 60, unit: "g" }
     ],
-    scores: { price: 0.80, swiss: 0.95, presentation: 0.85, prepEase: 0.80, sustainability: 0.85 }
+    scores: { price: 0.80, swiss: 1.00, presentation: 0.85, prepEase: 0.80, sustainability: 0.85 }
   },
   {
     id: "fresh-fruit-cups",
@@ -373,7 +427,7 @@ const meals = [
     capabilities: ["vegan", "vegetarian", "sweet", "cold", "coffee-break", "prepare-ahead"],
     serving: { piecesPerServing: 1 },
     ingredients: [{ concept: "mixed-fruit", amountPerServing: 150, unit: "g" }],
-    scores: { price: 0.70, swiss: 0.50, presentation: 0.90, prepEase: 0.85, sustainability: 0.80 }
+    scores: { price: 0.70, swiss: 0.00, presentation: 0.90, prepEase: 0.85, sustainability: 0.80 }
   },
   {
     id: "mini-quiche-break-bites",
@@ -381,7 +435,7 @@ const meals = [
     capabilities: ["vegetarian", "savory", "warm", "finger-food", "coffee-break"],
     serving: { piecesPerServing: 2 },
     ingredients: [{ concept: "mini-spinach-quiche", amountPerServing: 2, unit: "piece" }],
-    scores: { price: 0.75, swiss: 0.85, presentation: 0.80, prepEase: 0.92, sustainability: 0.72 }
+    scores: { price: 0.75, swiss: 1.00, presentation: 0.80, prepEase: 0.92, sustainability: 0.72 }
   },
   {
     id: "ham-croissant-break-bites",
@@ -389,7 +443,7 @@ const meals = [
     capabilities: ["savory", "warm", "finger-food", "coffee-break"],
     serving: { piecesPerServing: 2 },
     ingredients: [{ concept: "mini-ham-croissant", amountPerServing: 2, unit: "piece" }],
-    scores: { price: 0.70, swiss: 0.90, presentation: 0.78, prepEase: 0.90, sustainability: 0.50 }
+    scores: { price: 0.70, swiss: 1.00, presentation: 0.78, prepEase: 0.90, sustainability: 0.50 }
   },
   {
     id: "ham-quiche-lunch-platter",
@@ -400,7 +454,7 @@ const meals = [
       { concept: "mini-ham-croissant", amountPerServing: 2, unit: "piece" },
       { concept: "mini-spinach-quiche", amountPerServing: 1, unit: "piece" }
     ],
-    scores: { price: 0.72, swiss: 0.90, presentation: 0.78, prepEase: 0.90, sustainability: 0.55 }
+    scores: { price: 0.72, swiss: 1.00, presentation: 0.78, prepEase: 0.90, sustainability: 0.55 }
   },
   {
     id: "mediterranean-falafel-bowl",
@@ -412,7 +466,7 @@ const meals = [
       { concept: "hummus", amountPerServing: 50, unit: "g" },
       { concept: "cherry-tomato", amountPerServing: 80, unit: "g" }
     ],
-    scores: { price: 0.82, swiss: 0.35, presentation: 0.86, prepEase: 0.78, sustainability: 0.92 }
+    scores: { price: 0.82, swiss: 0.00, presentation: 0.86, prepEase: 0.78, sustainability: 0.92 }
   },
   {
     id: "caprese-lunch-bowl",
@@ -424,7 +478,7 @@ const meals = [
       { concept: "cherry-tomato", amountPerServing: 100, unit: "g" },
       { concept: "basil", amountPerServing: 4, unit: "g" }
     ],
-    scores: { price: 0.68, swiss: 0.78, presentation: 0.92, prepEase: 0.72, sustainability: 0.76 }
+    scores: { price: 0.68, swiss: 1.00, presentation: 0.92, prepEase: 0.72, sustainability: 0.76 }
   },
   {
     id: "falafel-hummus-canapes",
@@ -435,7 +489,7 @@ const meals = [
       { concept: "falafel", amountPerServing: 3, unit: "piece" },
       { concept: "hummus", amountPerServing: 25, unit: "g" }
     ],
-    scores: { price: 0.84, swiss: 0.30, presentation: 0.86, prepEase: 0.85, sustainability: 0.92 }
+    scores: { price: 0.84, swiss: 0.00, presentation: 0.86, prepEase: 0.85, sustainability: 0.92 }
   },
   {
     id: "tomato-basil-bites",
@@ -447,7 +501,7 @@ const meals = [
       { concept: "hummus", amountPerServing: 20, unit: "g" },
       { concept: "basil", amountPerServing: 3, unit: "g" }
     ],
-    scores: { price: 0.76, swiss: 0.62, presentation: 0.94, prepEase: 0.70, sustainability: 0.90 }
+    scores: { price: 0.76, swiss: 0.00, presentation: 0.94, prepEase: 0.70, sustainability: 0.90 }
   },
   {
     id: "fruit-skewers",
@@ -455,7 +509,7 @@ const meals = [
     capabilities: ["vegan", "vegetarian", "sweet", "finger-food", "cold", "reception", "prepare-ahead"],
     serving: { piecesPerServing: 2 },
     ingredients: [{ concept: "mixed-fruit", amountPerServing: 140, unit: "g" }],
-    scores: { price: 0.68, swiss: 0.48, presentation: 0.94, prepEase: 0.76, sustainability: 0.78 }
+    scores: { price: 0.68, swiss: 0.00, presentation: 0.94, prepEase: 0.76, sustainability: 0.78 }
   },
   {
     id: "swiss-cheese-omelette",
@@ -485,96 +539,97 @@ const meals = [
 
 const products = [
   {
-    id: "mozzarella-1kg", sku: "MOCK-001", name: "Mozzarella 1 kg", concept: "mozzarella",
+    id: "mozzarella-1kg", sku: "MOCK-001", name: "Swiss Mozzarella 1 kg", concept: "mozzarella", originCountry: "CH",
     package: { amount: 1000, unit: "g" }, price: { amount: 9.80, currency: "CHF" },
-    capabilities: ["vegetarian"], scores: { price: 0.80, swiss: 0.70, sustainability: 0.70 }
+    capabilities: ["vegetarian"], scores: { price: 0.80, swiss: 1.00, sustainability: 0.70 }
   },
   {
-    id: "cherry-tomatoes-500g", sku: "MOCK-002", name: "Cherry Tomatoes 500 g", concept: "cherry-tomato",
+    id: "cherry-tomatoes-500g", sku: "MOCK-002", name: "Swiss Cherry Tomatoes 500 g", concept: "cherry-tomato", originCountry: "CH",
     package: { amount: 500, unit: "g" }, price: { amount: 4.20, currency: "CHF" },
-    capabilities: ["vegetarian", "vegan"], scores: { price: 0.75, swiss: 0.85, sustainability: 0.80 }
+    capabilities: ["vegetarian", "vegan"], scores: { price: 0.75, swiss: 1.00, sustainability: 0.80 }
   },
   {
-    id: "basil-100g", sku: "MOCK-003", name: "Fresh Basil 100 g", concept: "basil",
+    id: "basil-100g", sku: "MOCK-003", name: "Swiss Fresh Basil 100 g", concept: "basil", originCountry: "CH",
     package: { amount: 100, unit: "g" }, price: { amount: 3.90, currency: "CHF" },
-    capabilities: ["vegetarian", "vegan"], scores: { price: 0.60, swiss: 0.60, sustainability: 0.75 }
+    capabilities: ["vegetarian", "vegan"], scores: { price: 0.60, swiss: 1.00, sustainability: 0.75 }
   },
   {
-    id: "spinach-quiche-20", sku: "MOCK-004", name: "Mini Spinach Quiche 20 pcs", concept: "mini-spinach-quiche",
+    id: "spinach-quiche-20", sku: "MOCK-004", name: "Swiss Mini Spinach Quiche 20 pcs", concept: "mini-spinach-quiche", originCountry: "CH",
     package: { amount: 20, unit: "piece" }, price: { amount: 18.90, currency: "CHF" },
-    capabilities: ["vegetarian", "finger-food", "ready-to-heat"], scores: { price: 0.75, swiss: 0.85, sustainability: 0.70 }
+    capabilities: ["vegetarian", "finger-food", "ready-to-heat"], scores: { price: 0.75, swiss: 1.00, sustainability: 0.70 }
   },
   {
-    id: "falafel-50", sku: "MOCK-005", name: "Falafel 50 pcs", concept: "falafel",
+    id: "falafel-50", sku: "MOCK-005", name: "Falafel 50 pcs", concept: "falafel", originCountry: "NL",
     package: { amount: 50, unit: "piece" }, price: { amount: 21.50, currency: "CHF" },
-    capabilities: ["vegan", "vegetarian", "finger-food"], scores: { price: 0.90, swiss: 0.25, sustainability: 0.90 }
+    capabilities: ["vegan", "vegetarian", "finger-food"], scores: { price: 0.90, swiss: 0.00, sustainability: 0.90 }
   },
   {
-    id: "hummus-1kg", sku: "MOCK-006", name: "Hummus 1 kg", concept: "hummus",
+    id: "hummus-1kg", sku: "MOCK-006", name: "Hummus 1 kg", concept: "hummus", originCountry: "DE",
     package: { amount: 1000, unit: "g" }, price: { amount: 10.90, currency: "CHF" },
-    capabilities: ["vegan", "vegetarian"], scores: { price: 0.85, swiss: 0.30, sustainability: 0.85 }
+    capabilities: ["vegan", "vegetarian"], scores: { price: 0.85, swiss: 0.00, sustainability: 0.85 }
   },
   {
-    id: "ham-croissant-24", sku: "MOCK-007", name: "Mini Ham Croissants 24 pcs", concept: "mini-ham-croissant",
+    id: "ham-croissant-24", sku: "MOCK-007", name: "Swiss Mini Ham Croissants 24 pcs", concept: "mini-ham-croissant", originCountry: "CH",
     package: { amount: 24, unit: "piece" }, price: { amount: 22.50, currency: "CHF" },
-    capabilities: ["finger-food", "ready-to-heat"], scores: { price: 0.70, swiss: 0.90, sustainability: 0.45 }
+    capabilities: ["finger-food", "ready-to-heat"], scores: { price: 0.70, swiss: 1.00, sustainability: 0.45 }
   },
   {
-    id: "muesli-2kg", sku: "MOCK-008", name: "Müesli 2 kg", concept: "muesli",
+    id: "muesli-2kg", sku: "MOCK-008", name: "Swiss Müesli 2 kg", concept: "muesli", originCountry: "CH",
     package: { amount: 2000, unit: "g" }, price: { amount: 13.50, currency: "CHF" },
-    capabilities: ["vegetarian", "breakfast"], scores: { price: 0.90, swiss: 0.90, sustainability: 0.80 }
+    capabilities: ["vegetarian", "breakfast"], scores: { price: 0.90, swiss: 1.00, sustainability: 0.80 }
   },
   {
-    id: "yogurt-1kg", sku: "MOCK-009", name: "Natural Yogurt 1 kg", concept: "yogurt",
+    id: "yogurt-1kg", sku: "MOCK-009", name: "Swiss Natural Yogurt 1 kg", concept: "yogurt", originCountry: "CH",
     package: { amount: 1000, unit: "g" }, price: { amount: 5.20, currency: "CHF" },
-    capabilities: ["vegetarian"], scores: { price: 0.85, swiss: 0.95, sustainability: 0.80 }
+    capabilities: ["vegetarian"], scores: { price: 0.85, swiss: 1.00, sustainability: 0.80 }
   },
   {
-    id: "apple-2kg", sku: "MOCK-010", name: "Swiss Apples 2 kg", concept: "apple",
+    id: "apple-2kg", sku: "MOCK-010", name: "Swiss Apples 2 kg", concept: "apple", originCountry: "CH",
     package: { amount: 2000, unit: "g" }, price: { amount: 7.40, currency: "CHF" },
     capabilities: ["vegan", "vegetarian"], scores: { price: 0.90, swiss: 1.00, sustainability: 0.95 }
   },
   {
-    id: "eggs-30", sku: "MOCK-011", name: "Swiss Eggs 30 pcs", concept: "egg",
+    id: "eggs-30", sku: "MOCK-011", name: "Swiss Eggs 30 pcs", concept: "egg", originCountry: "CH",
     package: { amount: 30, unit: "piece" }, price: { amount: 13.90, currency: "CHF" },
     capabilities: ["vegetarian"], scores: { price: 0.85, swiss: 1.00, sustainability: 0.75 }
   },
   {
-    id: "butter-1kg", sku: "MOCK-012", name: "Swiss Butter 1 kg", concept: "butter",
+    id: "butter-1kg", sku: "MOCK-012", name: "Swiss Butter 1 kg", concept: "butter", originCountry: "CH",
     package: { amount: 1000, unit: "g" }, price: { amount: 12.50, currency: "CHF" },
     capabilities: ["vegetarian"], scores: { price: 0.70, swiss: 1.00, sustainability: 0.65 }
   },
   {
-    id: "mixed-fruit-2kg", sku: "MOCK-013", name: "Mixed Fresh Fruit 2 kg", concept: "mixed-fruit",
+    id: "mixed-fruit-2kg", sku: "MOCK-013", name: "Mixed Fresh Fruit 2 kg", concept: "mixed-fruit", originCountry: null,
     package: { amount: 2000, unit: "g" }, price: { amount: 17.90, currency: "CHF" },
-    capabilities: ["vegan", "vegetarian"], scores: { price: 0.65, swiss: 0.45, sustainability: 0.70 }
+    capabilities: ["vegan", "vegetarian"], scores: { price: 0.65, swiss: 0.00, sustainability: 0.70 }
   },
   {
-    id: "mineral-water-6x15", sku: "MOCK-014", name: "Mineral Water 6 × 1.5 L", concept: "water",
+    id: "mineral-water-6x15", sku: "MOCK-014", name: "Swiss Mineral Water 6 × 1.5 L", concept: "water", originCountry: "CH",
     package: { amount: 9, unit: "liter" }, price: { amount: 8.90, currency: "CHF" },
-    capabilities: ["non-alcoholic-drink", "water"], scores: { price: 0.95, swiss: 0.90, sustainability: 0.70 }
+    capabilities: ["non-alcoholic-drink", "water"], scores: { price: 0.95, swiss: 1.00, sustainability: 0.70 }
   },
   {
-    id: "apple-juice-6l", sku: "MOCK-015", name: "Swiss Apple Juice 6 L", concept: "apple-juice",
+    id: "apple-juice-6l", sku: "MOCK-015", name: "Swiss Apple Juice 6 L", concept: "apple-juice", originCountry: "CH",
     package: { amount: 6, unit: "liter" }, price: { amount: 14.90, currency: "CHF" },
     capabilities: ["non-alcoholic-drink", "juice"], scores: { price: 0.80, swiss: 1.00, sustainability: 0.85 }
   },
   {
-    id: "coffee-beans-1kg", sku: "MOCK-016", name: "Coffee Beans 1 kg", concept: "coffee-beans",
+    id: "coffee-beans-1kg", sku: "MOCK-016", name: "Coffee Beans 1 kg", concept: "coffee-beans", originCountry: "BR",
     package: { amount: 1000, unit: "g" }, price: { amount: 21.90, currency: "CHF" },
     capabilities: ["coffee"], conversion: { amountPerServing: 8, servingUnit: "cup", sourceUnit: "g" },
-    scores: { price: 0.75, swiss: 0.10, sustainability: 0.65 }
+    scores: { price: 0.75, swiss: 0.00, sustainability: 0.65 }
   },
   {
-    id: "napkins-250", sku: "MOCK-017", name: "Napkins 250 pcs", concept: "napkin",
+    id: "napkins-250", sku: "MOCK-017", name: "Napkins 250 pcs", concept: "napkin", originCountry: "DE",
     package: { amount: 250, unit: "piece" }, price: { amount: 7.50, currency: "CHF" },
-    capabilities: ["napkin"], scores: { price: 0.90, swiss: 0.50, sustainability: 0.70 }
+    capabilities: ["napkin"], scores: { price: 0.90, swiss: 0.00, sustainability: 0.70 }
   }
 ];
 
 upsertMany("eventTemplates", eventTemplates);
 upsertMany("meals", meals);
 upsertMany("products", products);
+upsertMany("planningPriorities", planningPriorities);
 
 print("------------------------------------------------");
 print("Catering planner seed completed.");

@@ -2,6 +2,7 @@ package ch.inabox.catering.repository
 
 import ch.inabox.catering.model.EventTemplate
 import ch.inabox.catering.model.Meal
+import ch.inabox.catering.model.PlanningPriority
 import ch.inabox.catering.model.Product
 import org.bson.types.ObjectId
 import org.springframework.data.mongodb.repository.MongoRepository
@@ -15,3 +16,5 @@ interface EventTemplateRepository : MongoRepository<EventTemplate, ObjectId> {
 interface MealRepository : MongoRepository<Meal, ObjectId>
 
 interface ProductRepository : MongoRepository<Product, ObjectId>
+
+interface PlanningPriorityRepository : MongoRepository<PlanningPriority, ObjectId>

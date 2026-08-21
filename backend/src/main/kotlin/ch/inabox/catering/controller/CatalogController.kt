@@ -2,9 +2,11 @@ package ch.inabox.catering.controller
 
 import ch.inabox.catering.model.EventTemplate
 import ch.inabox.catering.model.Meal
+import ch.inabox.catering.model.PlanningPriority
 import ch.inabox.catering.model.Product
 import ch.inabox.catering.repository.EventTemplateRepository
 import ch.inabox.catering.repository.MealRepository
+import ch.inabox.catering.repository.PlanningPriorityRepository
 import ch.inabox.catering.repository.ProductRepository
 import ch.inabox.catering.service.TemplateNotFoundException
 import org.springframework.web.bind.annotation.GetMapping
@@ -18,6 +20,7 @@ class CatalogController(
     private val eventTemplateRepository: EventTemplateRepository,
     private val mealRepository: MealRepository,
     private val productRepository: ProductRepository,
+    private val planningPriorityRepository: PlanningPriorityRepository,
 ) {
     @GetMapping("/templates")
     fun templates(): List<EventTemplate> = eventTemplateRepository.findAll().sortedBy { it.templateId }
@@ -31,4 +34,8 @@ class CatalogController(
 
     @GetMapping("/products")
     fun products(): List<Product> = productRepository.findAll().sortedBy { it.productId }
+
+    @GetMapping("/priorities")
+    fun priorities(): List<PlanningPriority> =
+        planningPriorityRepository.findAll().sortedWith(compareBy(PlanningPriority::displayOrder, PlanningPriority::priorityId))
 }

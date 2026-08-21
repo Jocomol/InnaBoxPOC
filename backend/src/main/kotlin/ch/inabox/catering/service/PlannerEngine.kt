@@ -521,6 +521,7 @@ class PlannerEngine {
             sku = product.sku,
             name = product.name,
             concept = product.concept,
+            originCountry = product.originCountry,
             packageSize = Quantity(decimal(product.packageInfo.amount), unit),
             packageCount = packageCount,
             requiredQuantity = display(need.amountBase),

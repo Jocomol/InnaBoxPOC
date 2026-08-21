@@ -11,7 +11,10 @@
 <body>
   <header class="site-header">
     <a class="brand" href="#">TABLE<span>PLAN</span></a>
-    <p>Deterministic catering planner</p>
+    <nav class="site-nav" aria-label="Primary navigation">
+      <a href="#planner-form">Planner</a>
+      <a href="#catalog-browser">Catalog browser</a>
+    </nav>
   </header>
 
   <main>
@@ -166,6 +169,36 @@
           <div id="requirement-trace" class="requirement-trace"></div>
         </details>
       </section>
+    </section>
+
+    <section id="catalog-browser" class="catalog-browser" aria-labelledby="catalog-heading">
+      <div class="catalog-intro">
+        <div>
+          <p class="eyebrow">MongoDB catalog</p>
+          <h2 id="catalog-heading">Browse what the planner knows.</h2>
+          <p>Inspect every recipe and purchasable item, including its capabilities, planning scores, package data, and ingredients.</p>
+        </div>
+        <p id="catalog-count" class="catalog-count" aria-live="polite">Loading catalog…</p>
+      </div>
+
+      <div class="catalog-toolbar">
+        <div class="catalog-tabs" role="tablist" aria-label="Catalog type">
+          <button class="catalog-tab active" type="button" role="tab" aria-selected="true" data-catalog-type="meals">Recipes <span id="meal-count">0</span></button>
+          <button class="catalog-tab" type="button" role="tab" aria-selected="false" data-catalog-type="products">Items <span id="product-count">0</span></button>
+        </div>
+        <label class="catalog-search">
+          <span class="visually-hidden">Search catalog</span>
+          <input id="catalog-search" type="search" placeholder="Search name, ID, ingredient…" autocomplete="off">
+        </label>
+        <label class="catalog-filter">
+          <span class="visually-hidden">Filter by capability</span>
+          <select id="catalog-capability" aria-label="Filter by capability">
+            <option value="">All capabilities</option>
+          </select>
+        </label>
+      </div>
+
+      <div id="catalog-results" class="catalog-grid"></div>
     </section>
   </main>
 
