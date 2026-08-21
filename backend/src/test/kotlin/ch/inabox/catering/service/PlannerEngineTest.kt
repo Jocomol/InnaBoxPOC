@@ -188,6 +188,167 @@ class PlannerEngineTest {
         assertEquals(first, second)
     }
 
+    @Test
+    fun `scales combined meal quantity to requested servings per guest`() {
+        val template = EventTemplate(
+            templateId = "scaled",
+            name = "Scaled",
+            description = "Test",
+            requirements = listOf(
+                requirement("warm-meal", "meal", setOf("warm"), 1.0, "servings-per-guest"),
+                requirement("cold-meal", "meal", setOf("cold"), 1.0, "servings-per-guest"),
+            ),
+            weights = mapOf("price" to 1.0),
+        )
+        val meals = listOf(
+            meal("warm-meal", setOf("warm"), "warm-food", 0.8),
+            meal("cold-meal", setOf("cold"), "cold-food", 0.8),
+        )
+        val products = listOf(
+            product("warm-food", "warm-food", 10.0, "piece", 5.0),
+            product("cold-food", "cold-food", 10.0, "piece", 5.0),
+        )
+
+        val plan = engine.resolve(
+            template,
+            meals,
+            products,
+            ResolvePlanRequest(
+                templateId = template.templateId,
+                guestCount = 10,
+                budget = 100.0,
+                servingsPerGuest = 3,
+            ),
+        )
+
+        assertEquals(3, plan.event.servingsPerGuest)
+        assertEquals(listOf(15, 15), plan.selectedMeals.map { it.servings })
+        assertEquals(30, plan.selectedMeals.sumOf { it.servings })
+        assertEquals(listOf(3, 3), plan.shoppingItems.map { it.packageCount })
+    }
+
+    @Test
+    fun `rejects more than ten servings per guest`() {
+        val template = productOnlyTemplate(
+            requirement("water", "product", setOf("water"), 1.0, "liter-per-guest"),
+        )
+
+        val exception = assertThrows<IllegalArgumentException> {
+            engine.resolve(
+                template,
+                emptyList(),
+                listOf(product("water", "water", 10.0, "liter", 5.0, setOf("water"))),
+                ResolvePlanRequest(
+                    templateId = template.templateId,
+                    guestCount = 10,
+                    budget = 100.0,
+                    servingsPerGuest = 11,
+                ),
+            )
+        }
+
+        assertTrue(exception.message!!.contains("between 1 and 10"))
+    }
+
+    @Test
+    fun `required meal wins a compatible template slot regardless of score`() {
+        val template = EventTemplate(
+            templateId = "required-slot",
+            name = "Required slot",
+            description = "Test",
+            requirements = listOf(requirement("savory", "meal", setOf("savory"), 1.0, "servings-per-guest")),
+            weights = mapOf("price" to 1.0),
+        )
+        val meals = listOf(
+            meal("highest-score", setOf("savory"), "highest-food", 1.0),
+            meal("must-have-quiche", setOf("savory"), "quiche-food", 0.1),
+        )
+        val products = listOf(
+            product("highest-food", "highest-food", 10.0, "piece", 5.0),
+            product("quiche-food", "quiche-food", 10.0, "piece", 5.0),
+        )
+
+        val plan = engine.resolve(
+            template,
+            meals,
+            products,
+            ResolvePlanRequest(
+                templateId = template.templateId,
+                guestCount = 10,
+                budget = 100.0,
+                requiredMealIds = setOf("must-have-quiche"),
+            ),
+        )
+
+        assertEquals("must-have-quiche", plan.selectedMeals.single().mealId)
+        assertEquals(setOf("must-have-quiche"), plan.event.requiredMealIds)
+    }
+
+    @Test
+    fun `required meal without a compatible slot is added to the menu`() {
+        val template = EventTemplate(
+            templateId = "required-extra",
+            name = "Required extra",
+            description = "Test",
+            requirements = listOf(requirement("savory", "meal", setOf("savory"), 1.0, "servings-per-guest")),
+            weights = mapOf("price" to 1.0),
+        )
+        val meals = listOf(
+            meal("savory-meal", setOf("savory"), "savory-food", 0.8),
+            meal("required-dessert", setOf("sweet"), "sweet-food", 0.7),
+        )
+        val products = listOf(
+            product("savory-food", "savory-food", 10.0, "piece", 5.0),
+            product("sweet-food", "sweet-food", 10.0, "piece", 5.0),
+        )
+
+        val plan = engine.resolve(
+            template,
+            meals,
+            products,
+            ResolvePlanRequest(
+                templateId = template.templateId,
+                guestCount = 10,
+                budget = 100.0,
+                servingsPerGuest = 3,
+                requiredMealIds = setOf("required-dessert"),
+            ),
+        )
+
+        assertEquals(listOf("savory-meal", "required-dessert"), plan.selectedMeals.map { it.mealId })
+        assertEquals(30, plan.selectedMeals.sumOf { it.servings })
+        assertTrue(plan.fulfilledRequirements.any { it.requirementId == "guaranteed-required-dessert" })
+    }
+
+    @Test
+    fun `required meal conflicting with hard constraints is rejected`() {
+        val template = EventTemplate(
+            templateId = "required-conflict",
+            name = "Required conflict",
+            description = "Test",
+            requirements = listOf(requirement("savory", "meal", setOf("savory"), 1.0, "servings-per-guest")),
+            weights = mapOf("price" to 1.0),
+        )
+        val meatMeal = meal("meat-quiche", setOf("savory"), "quiche-food", 0.8)
+
+        val exception = assertThrows<PlanResolutionException> {
+            engine.resolve(
+                template,
+                listOf(meatMeal),
+                listOf(product("quiche-food", "quiche-food", 10.0, "piece", 5.0)),
+                ResolvePlanRequest(
+                    templateId = template.templateId,
+                    guestCount = 10,
+                    budget = 100.0,
+                    requiredMealIds = setOf("meat-quiche"),
+                    hardConstraints = HardConstraints(requiredCapabilities = setOf("vegan")),
+                ),
+            )
+        }
+
+        assertTrue(exception.message!!.contains("does not satisfy hard capabilities"))
+    }
+
     private fun requirement(
         id: String,
         type: String,

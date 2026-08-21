@@ -42,11 +42,29 @@
             <span>Guests</span>
             <input id="guest-count" type="number" min="1" max="10000" value="40" required>
           </label>
+          <label class="field">
+            <span>Food servings / guest</span>
+            <input id="servings-per-guest" type="number" min="1" max="10" step="1" placeholder="Template">
+            <small class="field-hint">Optional · maximum 10</small>
+          </label>
           <label class="field money-field">
             <span>Budget</span>
             <i>CHF</i>
             <input id="budget" type="number" min="0" step="10" value="800" required>
           </label>
+        </div>
+
+        <div class="guaranteed-meals">
+          <label class="field">
+            <span>Guaranteed meals</span>
+            <select id="required-meal-select" disabled>
+              <option value="">Loading meal catalog…</option>
+            </select>
+            <small class="field-hint">Add dishes that must appear in the final menu.</small>
+          </label>
+          <div id="required-meal-chips" class="required-meal-chips" aria-live="polite">
+            <span class="no-required-meals">No guaranteed meals selected.</span>
+          </div>
         </div>
       </section>
 

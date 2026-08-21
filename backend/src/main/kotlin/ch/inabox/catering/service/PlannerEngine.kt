@@ -13,6 +13,7 @@ import ch.inabox.catering.model.Money
 import ch.inabox.catering.model.PlanTotals
 import ch.inabox.catering.model.Product
 import ch.inabox.catering.model.Quantity
+import ch.inabox.catering.model.RequirementTarget
 import ch.inabox.catering.model.ResolvePlanRequest
 import ch.inabox.catering.model.SelectedMeal
 import ch.inabox.catering.model.ShoppingItem
@@ -22,6 +23,7 @@ import org.springframework.stereotype.Component
 import java.math.BigDecimal
 import java.math.RoundingMode
 import kotlin.math.ceil
+import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
 
@@ -40,26 +42,71 @@ class PlannerEngine {
             preferredCapabilities = normalizeCapabilities(request.preferences.preferredCapabilities),
         )
         val weights = resolveWeights(template.weights, request.weights)
+        val requiredMeals = resolveRequiredMeals(request.requiredMealIds, meals, constraints)
+        val requiredMealsById = requiredMeals.associateBy { it.mealId }
+        val unassignedRequiredMealIds = requiredMealsById.keys.toSortedSet()
+        val assignedMealIds = mutableSetOf<String>()
         val warnings = mutableListOf<String>()
         val selectedMeals = mutableListOf<SelectedMeal>()
         val fulfilledRequirements = mutableListOf<FulfilledRequirement>()
         val ingredientNeeds = linkedMapOf<Pair<String, String>, IngredientAccumulator>()
         val productNeeds = linkedMapOf<String, ProductAccumulator>()
 
-        template.requirements.filter { it.type.equals("meal", ignoreCase = true) }.forEach { requirement ->
-            val requiredCapabilities = normalizeCapabilities(requirement.requiredCapabilities) + constraints.requiredCapabilities
-            val candidates = meals.asSequence()
-                .filter { normalizeCapabilities(it.capabilities).containsAll(requiredCapabilities) }
-                .filter { normalizeCapabilities(it.capabilities).intersect(constraints.excludedCapabilities).isEmpty() }
-                .toList()
+        val mealSelections = template.requirements
+            .filter { it.type.equals("meal", ignoreCase = true) }
+            .mapNotNull { requirement ->
+                val requiredCapabilities = normalizeCapabilities(requirement.requiredCapabilities) + constraints.requiredCapabilities
+                val candidates = meals.asSequence()
+                    .filter { normalizeCapabilities(it.capabilities).containsAll(requiredCapabilities) }
+                    .filter { normalizeCapabilities(it.capabilities).intersect(constraints.excludedCapabilities).isEmpty() }
+                    .toList()
 
-            val scored = selectMeal(candidates, weights, preferences)
-            if (scored == null) {
-                handleMissingRequirement(requirement, requiredCapabilities, request.guestCount, warnings, fulfilledRequirements)
-                return@forEach
+                val forcedCandidates = candidates.filter { it.mealId in unassignedRequiredMealIds }
+                val unusedCandidates = candidates.filter { it.mealId !in assignedMealIds }
+                val selectionCandidates = when {
+                    forcedCandidates.isNotEmpty() -> forcedCandidates
+                    unusedCandidates.isNotEmpty() -> unusedCandidates
+                    else -> candidates
+                }
+                val scored = selectMeal(selectionCandidates, weights, preferences)
+                if (scored == null) {
+                    handleMissingRequirement(requirement, requiredCapabilities, request.guestCount, warnings, fulfilledRequirements)
+                    return@mapNotNull null
+                }
+                assignedMealIds += scored.candidate.mealId
+                unassignedRequiredMealIds -= scored.candidate.mealId
+
+                MealSelection(
+                    requirement = requirement,
+                    requiredCapabilities = requiredCapabilities,
+                    scored = scored,
+                    target = mealTarget(requirement, template, request.guestCount, scored.candidate, preferences),
+                )
             }
+            .toMutableList()
 
-            val target = mealTarget(requirement, template, request.guestCount, scored.candidate, preferences)
+        unassignedRequiredMealIds.forEach { mealId ->
+            val meal = requiredMealsById.getValue(mealId)
+            val requirement = TemplateRequirement(
+                requirementId = "guaranteed-$mealId",
+                type = "meal",
+                requiredCapabilities = constraints.requiredCapabilities,
+                target = RequirementTarget(amount = 1.0, unit = "servings-per-guest"),
+                required = true,
+            )
+            mealSelections += MealSelection(
+                requirement = requirement,
+                requiredCapabilities = constraints.requiredCapabilities,
+                scored = selectMeal(listOf(meal), weights, preferences)!!,
+                target = mealTarget(requirement, template, request.guestCount, meal, preferences),
+            )
+        }
+
+        val mealTargets = applyServingsOverride(mealSelections, request.guestCount, request.servingsPerGuest)
+        mealSelections.zip(mealTargets).forEach { (selection, target) ->
+            val requirement = selection.requirement
+            val scored = selection.scored
+            val requiredCapabilities = selection.requiredCapabilities
             val matched = requiredCapabilities.intersect(normalizeCapabilities(scored.candidate.capabilities)).toSortedSet()
             selectedMeals += SelectedMeal(
                 requirementId = requirement.requirementId,
@@ -173,6 +220,8 @@ class PlannerEngine {
                 templateId = template.templateId,
                 templateName = template.name,
                 guestCount = request.guestCount,
+                servingsPerGuest = request.servingsPerGuest,
+                requiredMealIds = requiredMealsById.keys.toSortedSet(),
                 budget = Money(money(request.budget)),
                 appliedWeights = weights.mapValues { decimal(it.value, 4) },
                 preferences = preferences,
@@ -198,10 +247,54 @@ class PlannerEngine {
         if (!request.budget.isFinite() || request.budget < 0.0) {
             throw IllegalArgumentException("Budget must be a finite, non-negative number")
         }
+        if (request.servingsPerGuest != null && request.servingsPerGuest !in 1..10) {
+            throw IllegalArgumentException("Servings per guest must be between 1 and 10")
+        }
+        if (request.requiredMealIds.any { it.isBlank() }) {
+            throw IllegalArgumentException("Required meal IDs must not be blank")
+        }
         val overlap = normalizeCapabilities(request.hardConstraints.requiredCapabilities)
             .intersect(normalizeCapabilities(request.hardConstraints.excludedCapabilities))
         if (overlap.isNotEmpty()) {
             throw IllegalArgumentException("Capabilities cannot be both required and excluded: ${overlap.sorted().joinToString()}")
+        }
+    }
+
+    private fun resolveRequiredMeals(
+        requestedIds: Set<String>,
+        meals: List<Meal>,
+        constraints: HardConstraints,
+    ): List<Meal> {
+        if (requestedIds.isEmpty()) return emptyList()
+
+        val mealsByNormalizedId = meals.associateBy { it.mealId.lowercase() }
+        val normalizedIds = requestedIds.map { it.trim().lowercase() }.toSortedSet()
+        val missingIds = normalizedIds.filter { it !in mealsByNormalizedId }
+        if (missingIds.isNotEmpty()) {
+            throw PlanResolutionException("Unknown required meal IDs: ${missingIds.joinToString()}")
+        }
+
+        return normalizedIds.map { mealsByNormalizedId.getValue(it) }.distinctBy { it.mealId }.sortedBy { it.mealId }.onEach { meal ->
+            val capabilities = normalizeCapabilities(meal.capabilities)
+            val missingCapabilities = constraints.requiredCapabilities - capabilities
+            if (missingCapabilities.isNotEmpty()) {
+                throw PlanResolutionException(
+                    "Required meal '${meal.mealId}' does not satisfy hard capabilities ${missingCapabilities.sorted()}",
+                )
+            }
+            val excludedCapabilities = capabilities.intersect(constraints.excludedCapabilities)
+            if (excludedCapabilities.isNotEmpty()) {
+                throw PlanResolutionException(
+                    "Required meal '${meal.mealId}' has excluded capabilities ${excludedCapabilities.sorted()}",
+                )
+            }
+            val excludedIngredients = meal.ingredients.map { it.concept.trim().lowercase() }
+                .intersect(constraints.excludedConcepts)
+            if (excludedIngredients.isNotEmpty()) {
+                throw PlanResolutionException(
+                    "Required meal '${meal.mealId}' uses excluded ingredients ${excludedIngredients.sorted()}",
+                )
+            }
         }
     }
 
@@ -271,6 +364,48 @@ class PlannerEngine {
         compareByDescending<ScoredCandidate<T>> { it.weightedScore }
             .thenByDescending { it.preferenceMatches.size }
             .thenBy { it.id }
+
+    private fun applyServingsOverride(
+        selections: List<MealSelection>,
+        guestCount: Int,
+        servingsPerGuest: Int?,
+    ): List<MealTarget> {
+        if (servingsPerGuest == null || selections.isEmpty()) return selections.map { it.target }
+
+        val minimums = selections.map { if (it.requirement.required) 1 else 0 }
+        val requestedTotal = guestCount * servingsPerGuest
+        val totalToAllocate = max(requestedTotal, minimums.sum())
+        val remaining = totalToAllocate - minimums.sum()
+        val baselineWeights = selections.map { it.target.servings.coerceAtLeast(1).toDouble() }
+        val baselineTotal = baselineWeights.sum()
+        val rawExtras = baselineWeights.map { it / baselineTotal * remaining }
+        val allocations = rawExtras.mapIndexed { index, raw -> minimums[index] + floor(raw).toInt() }.toMutableList()
+
+        var remainder = totalToAllocate - allocations.sum()
+        val remainderOrder = selections.indices.sortedWith(
+            compareByDescending<Int> { rawExtras[it] - floor(rawExtras[it]) }
+                .thenBy { selections[it].requirement.requirementId },
+        )
+        var orderIndex = 0
+        while (remainder > 0) {
+            allocations[remainderOrder[orderIndex % remainderOrder.size]] += 1
+            orderIndex += 1
+            remainder -= 1
+        }
+
+        return selections.mapIndexed { index, selection ->
+            resizeMealTarget(selection.target, selection.scored.candidate, allocations[index])
+        }
+    }
+
+    private fun resizeMealTarget(target: MealTarget, meal: Meal, servings: Int): MealTarget {
+        val amount = when (UnitConverter.dimension(target.quantity.unit)) {
+            "piece" -> servings * meal.serving.piecesPerServing.coerceAtLeast(1.0)
+            "serving" -> servings.toDouble()
+            else -> target.quantity.amount * servings / target.servings.coerceAtLeast(1)
+        }
+        return MealTarget(Quantity(decimal(amount), target.quantity.unit), servings)
+    }
 
     private fun mealTarget(
         requirement: TemplateRequirement,
@@ -435,6 +570,13 @@ class PlannerEngine {
     private fun Double.formatMoney(): String = String.format(java.util.Locale.ROOT, "%.2f", this)
 
     private data class MealTarget(val quantity: Quantity, val servings: Int)
+
+    private data class MealSelection(
+        val requirement: TemplateRequirement,
+        val requiredCapabilities: Set<String>,
+        val scored: ScoredCandidate<Meal>,
+        val target: MealTarget,
+    )
 
     private data class ScoredCandidate<T>(
         val candidate: T,

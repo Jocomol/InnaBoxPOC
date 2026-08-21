@@ -1,6 +1,8 @@
-const state = { templates: [] };
+const state = { templates: [], meals: [], requiredMealIds: new Set() };
 const form = document.querySelector('#planner-form');
 const templateSelect = document.querySelector('#template');
+const requiredMealSelect = document.querySelector('#required-meal-select');
+const requiredMealChips = document.querySelector('#required-meal-chips');
 const description = document.querySelector('#template-description');
 const inventoryRows = document.querySelector('#inventory-rows');
 const errorBox = document.querySelector('#form-error');
@@ -21,6 +23,11 @@ document.querySelector('#back-to-form').addEventListener('click', () => {
   form.scrollIntoView({ behavior: 'smooth', block: 'start' });
 });
 templateSelect.addEventListener('change', applyTemplate);
+requiredMealSelect.addEventListener('change', () => {
+  if (!requiredMealSelect.value) return;
+  state.requiredMealIds.add(requiredMealSelect.value);
+  renderRequiredMeals();
+});
 form.addEventListener('submit', resolvePlan);
 
 const shareInput = document.querySelector('#vegetarian-share');
@@ -30,18 +37,47 @@ shareInput.addEventListener('input', () => {
 
 async function loadTemplates() {
   try {
-    state.templates = await fetchJson('/api/templates');
+    [state.templates, state.meals] = await Promise.all([
+      fetchJson('/api/templates'),
+      fetchJson('/api/meals')
+    ]);
     templateSelect.innerHTML = state.templates
       .map(template => `<option value="${escapeHtml(template.id)}">${escapeHtml(template.name)}</option>`)
       .join('');
     templateSelect.disabled = false;
     const preferred = state.templates.find(template => template.id === 'business-apero');
     if (preferred) templateSelect.value = preferred.id;
+    renderRequiredMeals();
     applyTemplate();
     addInventoryRow({ concept: 'mini-spinach-quiche', amount: 40, unit: 'piece' });
   } catch (error) {
     showError(`Could not load the catalog. ${error.message}`);
   }
+}
+
+function renderRequiredMeals() {
+  const selectedIds = [...state.requiredMealIds].sort();
+  requiredMealSelect.innerHTML = [
+    '<option value="">Add a guaranteed meal…</option>',
+    ...state.meals
+      .filter(meal => !state.requiredMealIds.has(meal.id))
+      .map(meal => `<option value="${escapeHtml(meal.id)}">${escapeHtml(meal.name)}</option>`)
+  ].join('');
+  requiredMealSelect.disabled = !state.meals.length;
+
+  requiredMealChips.innerHTML = selectedIds.length
+    ? selectedIds.map(id => {
+        const meal = state.meals.find(item => item.id === id);
+        return `<span class="required-meal-chip">${escapeHtml(meal?.name || id)}<button type="button" data-meal-id="${escapeHtml(id)}" aria-label="Remove ${escapeHtml(meal?.name || id)}">×</button></span>`;
+      }).join('')
+    : '<span class="no-required-meals">No guaranteed meals selected.</span>';
+
+  requiredMealChips.querySelectorAll('button[data-meal-id]').forEach(button => {
+    button.addEventListener('click', () => {
+      state.requiredMealIds.delete(button.dataset.mealId);
+      renderRequiredMeals();
+    });
+  });
 }
 
 function applyTemplate() {
@@ -109,11 +145,14 @@ async function resolvePlan(event) {
   })).filter(item => item.concept && item.amount > 0);
   const dietary = document.querySelector('#dietary-constraint').value;
   const shareVisible = !document.querySelector('#vegetarian-share-field').hidden;
+  const servingsValue = document.querySelector('#servings-per-guest').value;
 
   const request = {
     templateId: templateSelect.value,
     guestCount: Number(document.querySelector('#guest-count').value),
     budget: Number(document.querySelector('#budget').value),
+    servingsPerGuest: servingsValue === '' ? null : Number(servingsValue),
+    requiredMealIds: [...state.requiredMealIds].sort(),
     weights,
     preferences: {
       vegetarianShare: shareVisible ? Number(shareInput.value) : null,
@@ -146,10 +185,13 @@ async function resolvePlan(event) {
 }
 
 function renderPlan(plan) {
-  document.querySelector('#result-title').textContent = `${plan.event.templateName} for ${plan.event.guestCount} guests.`;
+  const foodAmount = plan.event.servingsPerGuest == null
+    ? 'template portions'
+    : `${plan.event.servingsPerGuest} servings each`;
+  document.querySelector('#result-title').textContent = `${plan.event.templateName} for ${plan.event.guestCount} guests · ${foodAmount}.`;
   renderWarnings(plan.warnings);
   renderTotals(plan.totals);
-  renderMeals(plan.selectedMeals);
+  renderMeals(plan.selectedMeals, new Set(plan.event.requiredMealIds || []));
   renderShoppingItems(plan.shoppingItems);
   renderInventory(plan.usedExistingInventory);
   renderTrace(plan.fulfilledRequirements);
@@ -171,11 +213,11 @@ function renderTotals(totals) {
   `;
 }
 
-function renderMeals(meals) {
+function renderMeals(meals, requiredMealIds) {
   document.querySelector('#selected-meals').innerHTML = meals.map(meal => `
     <article class="meal-card">
       <div class="meal-top">
-        <div><h4>${escapeHtml(meal.name)}</h4><span class="requirement">${escapeHtml(humanize(meal.requirementId))}</span></div>
+        <div><h4>${escapeHtml(meal.name)}</h4><span class="requirement">${escapeHtml(humanize(meal.requirementId))}</span>${requiredMealIds.has(meal.mealId) ? '<br><span class="guaranteed-badge">Guaranteed</span>' : ''}</div>
         <span class="score" title="Weighted score">${Math.round(meal.finalWeightedScore * 100)}</span>
       </div>
       <div class="chips">${meal.matchedCapabilities.map(capability => `<span class="chip">${escapeHtml(capability)}</span>`).join('')}</div>

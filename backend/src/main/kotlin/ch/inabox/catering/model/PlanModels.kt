@@ -9,6 +9,8 @@ data class EventSummary(
     val templateId: String,
     val templateName: String,
     val guestCount: Int,
+    val servingsPerGuest: Int?,
+    val requiredMealIds: Set<String>,
     val budget: Money,
     val appliedWeights: Map<String, Double>,
     val preferences: CustomerPreferences,

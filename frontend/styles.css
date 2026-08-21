@@ -51,9 +51,10 @@ h1 em { font-family: Iowan Old Style, Baskerville, Georgia, serif; color: var(--
 .section-heading h2 { margin: 1px 0 5px; font-size: 22px; font-weight: 600; letter-spacing: -.025em; }
 .section-heading p { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.45; }
 
-.field-grid { display: grid; grid-template-columns: 1.4fr .7fr .8fr; gap: 18px; }
+.field-grid { display: grid; grid-template-columns: 1.35fr .55fr .8fr .7fr; gap: 18px; }
 .field, .check-field { display: flex; flex-direction: column; gap: 9px; position: relative; }
 .field > span { color: var(--muted); font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
+.field-hint { margin-top: -4px; color: var(--muted); font-size: 10px; }
 input, select {
   width: 100%;
   min-height: 48px;
@@ -68,6 +69,12 @@ input, select {
 input:focus, select:focus { border-color: var(--green); box-shadow: 0 0 0 3px rgba(36, 91, 69, .1); }
 .money-field i { position: absolute; bottom: 15px; left: 14px; color: var(--muted); font-style: normal; font-size: 13px; }
 .money-field input { padding-left: 50px; }
+.guaranteed-meals { display: grid; grid-template-columns: minmax(260px, .8fr) 1.8fr; gap: 18px; margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--line); }
+.required-meal-chips { display: flex; flex-wrap: wrap; align-content: center; gap: 8px; min-height: 48px; }
+.required-meal-chip { display: inline-flex; align-items: center; gap: 8px; padding: 8px 9px 8px 12px; color: var(--green); background: var(--sage); font-size: 12px; }
+.required-meal-chip button { display: grid; place-items: center; width: 20px; height: 20px; padding: 0; color: var(--green); background: transparent; border: 0; font-size: 17px; line-height: 1; }
+.required-meal-chip button:hover { color: var(--red); }
+.no-required-meals { align-self: center; color: var(--muted); font-size: 12px; }
 
 .weights { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
 .weight { padding: 15px; background: #f8f7f2; border: 1px solid #ecebe4; }
@@ -120,6 +127,7 @@ input[type="range"] { min-height: 20px; height: 20px; padding: 0; border: 0; acc
 .meal-top { display: flex; justify-content: space-between; align-items: start; gap: 12px; }
 .meal-card h4 { margin: 0 0 5px; font-size: 18px; }
 .meal-card .requirement { color: var(--muted); font-size: 11px; }
+.guaranteed-badge { display: inline-block; margin: 7px 0 0; padding: 4px 7px; color: #fff; background: var(--orange); font-size: 9px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
 .score { display: grid; place-items: center; width: 55px; height: 55px; border-radius: 50%; color: var(--green); background: var(--sage); font-family: Iowan Old Style, Baskerville, Georgia, serif; font-size: 17px; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 20px 0; }
 .chip { padding: 5px 8px; color: var(--green); background: #edf2eb; font-size: 10px; }
@@ -156,7 +164,7 @@ footer { display: flex; justify-content: space-between; max-width: 1240px; margi
   .site-header p { display: none; }
   .hero { padding: 58px 0 48px; }
   .panel { padding: 24px 18px; }
-  .field-grid, .preference-row, .inventory-result { grid-template-columns: 1fr; }
+  .field-grid, .preference-row, .inventory-result, .guaranteed-meals { grid-template-columns: 1fr; }
   .weights { grid-template-columns: repeat(2, 1fr); }
   .inventory-labels { display: none; }
   .inventory-row { grid-template-columns: 1fr 90px 100px 35px; }
