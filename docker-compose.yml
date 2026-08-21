@@ -1,0 +1,56 @@
+services:
+  mongodb:
+    image: mongo:8.0
+    container_name: catering-mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_DATABASE: catering
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+      - ./mongo/seed.js:/docker-entrypoint-initdb.d/01-seed.js:ro
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 4s
+      retries: 20
+      start_period: 10s
+
+  backend:
+    build:
+      context: ./backend
+    container_name: catering-backend
+    restart: unless-stopped
+    environment:
+      MONGODB_URI: mongodb://mongodb:27017/catering
+    ports:
+      - "8080:8080"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8080/actuator/health"]
+      interval: 5s
+      timeout: 4s
+      retries: 20
+      start_period: 20s
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: catering-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1/"]
+      interval: 10s
+      timeout: 4s
+      retries: 5
+
+volumes:
+  mongo-data:

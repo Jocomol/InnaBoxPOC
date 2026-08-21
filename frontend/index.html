@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Deterministic catering and shopping plan generator">
+  <title>Tableplan — Catering planner</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="#">TABLE<span>PLAN</span></a>
+    <p>Deterministic catering planner</p>
+  </header>
+
+  <main>
+    <section class="hero">
+      <p class="eyebrow">From headcount to checkout</p>
+      <h1>A considered menu.<br><em>Precisely provisioned.</em></h1>
+      <p class="hero-copy">Choose the occasion, set your priorities, and receive an explainable menu and package-level shopping list.</p>
+    </section>
+
+    <form id="planner-form" class="planner" novalidate>
+      <section class="panel setup-panel" aria-labelledby="event-heading">
+        <div class="section-heading">
+          <span>01</span>
+          <div>
+            <h2 id="event-heading">The event</h2>
+            <p id="template-description">Loading event templates…</p>
+          </div>
+        </div>
+
+        <div class="field-grid event-grid">
+          <label class="field wide">
+            <span>Event format</span>
+            <select id="template" required disabled>
+              <option>Loading…</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Guests</span>
+            <input id="guest-count" type="number" min="1" max="10000" value="40" required>
+          </label>
+          <label class="field money-field">
+            <span>Budget</span>
+            <i>CHF</i>
+            <input id="budget" type="number" min="0" step="10" value="800" required>
+          </label>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="priorities-heading">
+        <div class="section-heading">
+          <span>02</span>
+          <div>
+            <h2 id="priorities-heading">Planning priorities</h2>
+            <p>Weights are balanced automatically and remain visible in the plan.</p>
+          </div>
+        </div>
+        <div id="weights" class="weights"></div>
+        <div class="preference-row">
+          <label class="field compact" id="vegetarian-share-field">
+            <span>Vegetarian share</span>
+            <div class="range-line">
+              <input id="vegetarian-share" type="range" min="0" max="1" step="0.05" value="0.3">
+              <output id="vegetarian-share-value">30%</output>
+            </div>
+          </label>
+          <label class="field compact">
+            <span>Dietary constraint</span>
+            <select id="dietary-constraint">
+              <option value="">No global constraint</option>
+              <option value="vegetarian">Vegetarian menu</option>
+              <option value="vegan">Vegan menu</option>
+            </select>
+          </label>
+          <label class="check-field">
+            <input id="prepare-ahead" type="checkbox">
+            <span><strong>Prefer prepare-ahead</strong><small>Used as a deterministic tie-breaker</small></span>
+          </label>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="inventory-heading">
+        <div class="section-heading inventory-title">
+          <span>03</span>
+          <div>
+            <h2 id="inventory-heading">Already in stock</h2>
+            <p>Available quantities are deducted before packages are rounded up.</p>
+          </div>
+          <button id="add-inventory" class="secondary-button" type="button">+ Add item</button>
+        </div>
+        <div class="inventory-labels" aria-hidden="true">
+          <span>Product concept</span><span>Amount</span><span>Unit</span><span></span>
+        </div>
+        <div id="inventory-rows" class="inventory-rows"></div>
+      </section>
+
+      <div id="form-error" class="error-message" role="alert" hidden></div>
+      <button id="generate" class="generate-button" type="submit">
+        <span>Generate catering plan</span><b aria-hidden="true">→</b>
+      </button>
+    </form>
+
+    <section id="results" class="results" aria-live="polite" hidden>
+      <div class="result-intro">
+        <div>
+          <p class="eyebrow">Resolved plan</p>
+          <h2 id="result-title">Your event, accounted for.</h2>
+        </div>
+        <button id="back-to-form" class="secondary-button" type="button">Edit inputs</button>
+      </div>
+
+      <div id="warnings" class="warnings" hidden></div>
+      <div id="totals" class="totals"></div>
+
+      <section class="result-section">
+        <div class="result-section-heading">
+          <h3>Selected menu</h3>
+          <p>Every selection shows the capabilities and weighted score that put it on the menu.</p>
+        </div>
+        <div id="selected-meals" class="meal-grid"></div>
+      </section>
+
+      <section class="result-section">
+        <div class="result-section-heading">
+          <h3>Shopping list</h3>
+          <p>Required amounts are netted against stock before package rounding.</p>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Item</th><th>Need</th><th>Stock used</th><th>Packages</th><th>Purchased</th><th>Overbuy</th><th>Total</th></tr>
+            </thead>
+            <tbody id="shopping-items"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="result-section inventory-result">
+        <div>
+          <div class="result-section-heading"><h3>Existing stock used</h3></div>
+          <div id="inventory-used" class="stock-list"></div>
+        </div>
+        <details>
+          <summary>Requirement trace</summary>
+          <div id="requirement-trace" class="requirement-trace"></div>
+        </details>
+      </section>
+    </section>
+  </main>
+
+  <footer><span>TABLEPLAN POC</span><span>Explainable by design · CHF pricing</span></footer>
+</body>
+</html>
