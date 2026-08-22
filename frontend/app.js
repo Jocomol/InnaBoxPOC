@@ -1,3 +1,8 @@
+const i18n = window.TableplanI18n;
+i18n.init();
+const t = (key, params = {}) => i18n.t(key, params);
+const dynamic = (value, context = 'generic') => i18n.dynamicMarkup(value, context);
+
 const state = {
   templates: [],
   priorities: [],
@@ -24,6 +29,7 @@ const state = {
 
 const form = document.querySelector('#planner-form');
 const templateSelect = document.querySelector('#template');
+const eventTypesRoot = document.querySelector('#event-types');
 const description = document.querySelector('#template-description');
 const inventoryRows = document.querySelector('#inventory-rows');
 const errorBox = document.querySelector('#form-error');
@@ -54,9 +60,30 @@ const selectedMealsRoot = document.querySelector('#selected-meals');
 const regenerateMenuButton = document.querySelector('#regenerate-menu');
 const menuChangeStatus = document.querySelector('#menu-change-status');
 const excludedMealsRoot = document.querySelector('#excluded-meals');
+const languageSelect = document.querySelector('#language-select');
 
 let pickerDebounce;
 let inventoryPickerDebounce;
+
+languageSelect.value = i18n.language;
+languageSelect.addEventListener('change', () => i18n.setLanguage(languageSelect.value));
+i18n.onLanguageChange(() => {
+  languageSelect.value = i18n.language;
+  renderEventTypes();
+  renderMealCategories();
+  renderMealCapabilities();
+  renderRequiredMeals();
+  renderPickerResults();
+  renderInventoryPickerResults();
+  renderInventoryEmptyState();
+  if (state.currentPlan) renderPlan(state.currentPlan);
+  if (state.catalogLoaded) {
+    renderCatalogCapabilities();
+    renderCatalog();
+  }
+  if (mealPicker.open) searchPickerMeals();
+  if (inventoryPicker.open) searchInventoryConcepts();
+});
 
 document.querySelector('#add-inventory').addEventListener('click', () => {
   const row = addInventoryRow();
@@ -76,16 +103,15 @@ pickerCapability.addEventListener('change', () => {
 document.querySelector('#back-to-form').addEventListener('click', () => {
   form.scrollIntoView({ behavior: 'smooth', block: 'start' });
 });
-templateSelect.addEventListener('change', () => {
-  clearExcludedMeals();
-  applyTemplate();
+guestCountInput.addEventListener('input', () => {
+  syncDietaryGuestLimits();
+  refreshDietaryConflictUI();
 });
-guestCountInput.addEventListener('input', syncDietaryGuestLimits);
 form.addEventListener('submit', resolvePlan);
 regenerateMenuButton.addEventListener('click', () => form.requestSubmit());
 pickerSearch.addEventListener('input', () => {
   clearTimeout(pickerDebounce);
-  pickerDebounce = setTimeout(searchPickerMeals, 180);
+  pickerDebounce = setTimeout(searchPickerMeals, 280);
 });
 mealPicker.addEventListener('close', () => document.body.classList.remove('dialog-open'));
 mealPicker.addEventListener('click', event => {
@@ -93,7 +119,7 @@ mealPicker.addEventListener('click', event => {
 });
 inventoryPickerSearch.addEventListener('input', () => {
   clearTimeout(inventoryPickerDebounce);
-  inventoryPickerDebounce = setTimeout(searchInventoryConcepts, 180);
+  inventoryPickerDebounce = setTimeout(searchInventoryConcepts, 280);
 });
 inventoryPicker.addEventListener('close', () => {
   state.inventoryPickerRow = null;
@@ -117,8 +143,8 @@ document.querySelectorAll('[data-catalog-type]').forEach(button => {
       tab.setAttribute('aria-selected', String(selected));
     });
     catalogSearch.placeholder = state.catalogType === 'meals'
-      ? 'Search name, ID, ingredient…'
-      : 'Search name, SKU, concept…';
+      ? t('catalog.searchMeals')
+      : t('catalog.searchProducts');
     renderCatalogCapabilities();
     renderCatalog();
   });
@@ -134,13 +160,10 @@ async function loadPlannerData() {
       fetchJson('/api/meal-capabilities')
     ]);
 
-    templateSelect.innerHTML = state.templates
-      .map(template => `<option value="${escapeHtml(template.id)}">${escapeHtml(template.name)}</option>`)
-      .join('');
-    templateSelect.disabled = false;
-    const preferred = state.templates.find(template => template.id === 'business-apero');
-    if (preferred) templateSelect.value = preferred.id;
+    const preferred = state.templates.find(template => template.id === 'business-apero') || state.templates[0];
+    templateSelect.value = preferred?.id || '';
 
+    renderEventTypes();
     renderDietaryConstraints();
     renderMealCategories();
     renderMealCapabilities();
@@ -148,13 +171,46 @@ async function loadPlannerData() {
     applyTemplate();
     renderInventoryEmptyState();
   } catch (error) {
-    showError(`Could not load planner data. ${error.message}`);
+    showError(`${t('common.error')}: ${error.message}`);
   }
+}
+
+function renderEventTypes() {
+  if (!state.templates.length) {
+    eventTypesRoot.innerHTML = `<p class="empty-row">${escapeHtml(t('event.noFormats'))}</p>`;
+    return;
+  }
+
+  eventTypesRoot.innerHTML = state.templates.map(template => {
+    const selected = template.id === templateSelect.value;
+    return `
+      <button class="event-type-card ${selected ? 'selected' : ''}" type="button" role="radio"
+        aria-checked="${selected}" data-template-id="${escapeHtml(template.id)}">
+        ${visualIcon(template.icon || fallbackIcon('event', template.id), 'event-type-icon')}
+        <span class="event-type-copy">
+          <strong>${dynamic(template.name, 'event-name')}</strong>
+          <small>${dynamic(template.description, 'event-description')}</small>
+        </span>
+        <span class="event-type-check" aria-hidden="true">✓</span>
+      </button>
+    `;
+  }).join('');
+
+  eventTypesRoot.querySelectorAll('[data-template-id]').forEach(button => {
+    button.addEventListener('click', () => {
+      if (templateSelect.value === button.dataset.templateId) return;
+      templateSelect.value = button.dataset.templateId;
+      clearExcludedMeals();
+      renderEventTypes();
+      applyTemplate();
+      if (state.currentPlan) showMenuChange(t('event.changed'), true);
+    });
+  });
 }
 
 function renderDietaryConstraints() {
   if (!state.constraints.length) {
-    constraintRoot.innerHTML = '<p class="empty-row">No dietary constraints are available from the catalog.</p>';
+    constraintRoot.innerHTML = `<p class="empty-row">${escapeHtml(t('constraints.none'))}</p>`;
     updateConstraintActions();
     return;
   }
@@ -162,17 +218,18 @@ function renderDietaryConstraints() {
   constraintRoot.innerHTML = state.constraints.map(constraint => `
     <label class="constraint-option">
       <span class="constraint-card">
-        <span>
-          <strong>${escapeHtml(constraint.label)}</strong>
-          <small>${escapeHtml(constraint.description)}</small>
+        ${visualIcon(constraint.icon || fallbackIcon('dietary', constraint.id), 'constraint-icon')}
+        <span class="constraint-copy">
+          <strong>${dynamic(constraint.label, 'dietary-label')}</strong>
+          <small>${dynamic(constraint.description, 'dietary-description')}</small>
         </span>
         <span class="dietary-count-control">
           <input type="number" min="0" value="0" inputmode="numeric"
-            aria-label="${escapeHtml(constraint.label)} guests"
+            aria-label="${escapeHtml(constraint.label)} ${escapeHtml(t('constraints.guests'))}"
             data-dietary-count
             data-constraint-id="${escapeHtml(constraint.id)}"
             data-dietary-capability="${escapeHtml(constraint.dietaryCapability || constraint.requiredCapabilities?.[0] || constraint.id)}">
-          <span>guests</span>
+          <span data-i18n="constraints.guests">${escapeHtml(t('constraints.guests'))}</span>
         </span>
       </span>
     </label>
@@ -182,6 +239,7 @@ function renderDietaryConstraints() {
     input.addEventListener('input', () => {
       input.value = String(clamp(Math.trunc(Number(input.value) || 0), 0, currentGuestCount()));
       updateConstraintActions();
+      refreshDietaryConflictUI();
     });
   });
   syncDietaryGuestLimits();
@@ -191,7 +249,10 @@ function renderDietaryConstraints() {
 function updateConstraintActions() {
   const count = Object.keys(dietaryGuestCounts()).length;
   clearConstraintsButton.hidden = count === 0;
-  clearConstraintsButton.textContent = count ? `Clear ${count} count${count === 1 ? '' : 's'}` : 'Clear counts';
+  clearConstraintsButton.textContent = count ? t('constraints.clearCount', { count, suffix: count === 1 ? '' : 's' }) : t('constraints.clear');
+  constraintRoot.querySelectorAll('input[data-dietary-count]').forEach(input => {
+    input.closest('.constraint-card')?.classList.toggle('active', Number(input.value) > 0);
+  });
 }
 
 function clearConstraints() {
@@ -199,6 +260,13 @@ function clearConstraints() {
     input.value = '0';
   });
   updateConstraintActions();
+  refreshDietaryConflictUI();
+}
+
+function refreshDietaryConflictUI() {
+  renderRequiredMeals();
+  if (mealPicker.open) renderPickerResults();
+  renderCurrentMeals();
 }
 
 function currentGuestCount() {
@@ -232,17 +300,18 @@ function dietaryShares() {
 function renderMealCapabilities() {
   const capabilities = state.mealCapabilities || [];
   pickerCapability.innerHTML = [
-    '<option value="">All food types</option>',
-    ...capabilities.map(capability => `<option value="${escapeHtml(capability)}">${escapeHtml(humanize(capability))}</option>`)
+    `<option value="">${escapeHtml(t('picker.dishes.allFoodTypes'))}</option>`,
+    ...capabilities.map(capability => `<option value="${escapeHtml(capability)}" ${i18n.dynamicOptionAttributes(humanize(capability), 'capability')}>${escapeHtml(humanize(capability))}</option>`)
   ].join('');
   pickerCapability.value = state.pickerCapability;
 }
 
 function renderMealCategories() {
-  const categories = [{ id: '', label: 'All dishes' }, ...state.mealCategories];
+  const categories = [{ id: '', label: t('picker.dishes.all'), icon: '✦', staticLabel: true }, ...state.mealCategories];
   pickerCategories.innerHTML = categories.map(category => `
     <button class="category-button ${state.pickerCategory === category.id ? 'active' : ''}" type="button" data-category-id="${escapeHtml(category.id)}">
-      ${escapeHtml(category.label)}
+      ${visualIcon(category.icon || fallbackIcon('category', category.id), 'category-icon')}
+      <span>${category.staticLabel ? escapeHtml(category.label) : dynamic(category.label, 'meal-category')}</span>
     </button>
   `).join('');
   pickerCategories.querySelectorAll('[data-category-id]').forEach(button => {
@@ -277,21 +346,22 @@ async function searchPickerMeals() {
   if (state.pickerCategory) params.set('categoryId', state.pickerCategory);
   if (state.pickerCapability) params.set('capability', state.pickerCapability);
 
-  pickerStatus.textContent = 'Searching recipes…';
+  pickerStatus.textContent = t('picker.dishes.searching');
   try {
-    const meals = await fetchJson(`/api/meals/search?${params.toString()}`);
+    params.set('language', i18n.language);
+    const meals = await fetchJson(`/api/i18n/meals/search?${params.toString()}`);
     if (token !== state.pickerSearchToken) return;
     state.pickerMeals = meals;
     const filterText = [
-      query && `matching “${query}”`,
-      state.pickerCategory && categoryLabel(state.pickerCategory),
-      state.pickerCapability && humanize(state.pickerCapability)
+      query && t('picker.dishes.matching', { query }),
+      state.pickerCategory && i18n.cachedTranslation(categoryLabel(state.pickerCategory), 'meal-category'),
+      state.pickerCapability && i18n.cachedTranslation(humanize(state.pickerCapability), 'capability')
     ].filter(Boolean).join(' · ');
-    pickerStatus.textContent = `${meals.length} recipe${meals.length === 1 ? '' : 's'}${filterText ? ` · ${filterText}` : ''}`;
+    pickerStatus.textContent = `${t(meals.length === 1 ? 'picker.dishes.count.one' : 'picker.dishes.count.many', { count: meals.length })}${filterText ? ` · ${filterText}` : ''}`;
     renderPickerResults();
   } catch (error) {
     if (token !== state.pickerSearchToken) return;
-    pickerStatus.textContent = 'Recipe search failed.';
+    pickerStatus.textContent = t('picker.dishes.failed');
     pickerResults.innerHTML = `<div class="picker-empty">${escapeHtml(error.message)}</div>`;
   }
 }
@@ -299,25 +369,25 @@ async function searchPickerMeals() {
 function renderPickerResults() {
   document.querySelector('#meal-picker-selected-count').textContent = selectedCountText();
   if (!state.pickerMeals.length) {
-    pickerResults.innerHTML = '<div class="picker-empty">No recipes match this search and category.</div>';
+    pickerResults.innerHTML = `<div class="picker-empty">${escapeHtml(t('picker.dishes.none'))}</div>`;
     return;
   }
 
   pickerResults.innerHTML = state.pickerMeals.map(meal => {
     const conflicts = mealConstraintConflicts(meal);
     const isSelected = state.requiredMeals.has(meal.id);
-    const categories = (meal.categoryIds || []).map(categoryLabel).filter(Boolean);
+    const categories = (meal.categoryIds || []).map(categoryMeta).filter(Boolean);
     return `
       <article class="picker-card ${conflicts.length ? 'conflict' : ''}">
         <div>
-          <h3>${escapeHtml(meal.name)}</h3>
+          <h3>${dynamic(meal.name, 'meal-name')}</h3>
           <div class="picker-card-meta">
-            ${categories.slice(0, 3).map(label => `<span class="chip">${escapeHtml(label)}</span>`).join('')}
+            ${categories.slice(0, 3).map(category => `<span class="chip category-chip">${visualIcon(category.icon, 'chip-icon')}<span>${dynamic(category.label, 'meal-category')}</span></span>`).join('')}
           </div>
-          ${conflicts.length ? `<p class="picker-conflict">⚠ ${escapeHtml(conflictSummary(conflicts))}</p>` : ''}
+          ${conflicts.length ? `<p class="picker-conflict">⚠ ${escapeHtml(t('dishes.doesNotCover', { details: conflictSummary(conflicts) }))}</p>` : ''}
         </div>
         <button class="picker-add ${isSelected ? 'remove' : ''}" type="button" data-picker-meal-id="${escapeHtml(meal.id)}" aria-pressed="${isSelected}">
-          ${isSelected ? 'Remove' : '+ Add dish'}
+          ${isSelected ? escapeHtml(t('common.remove')) : escapeHtml(t('dishes.add'))}
         </button>
       </article>
     `;
@@ -340,7 +410,7 @@ function renderPickerResults() {
       renderPickerResults();
       renderCurrentMeals();
       if (state.currentPlan) {
-        showMenuChange(`${meal.name} ${wasSelected ? 'unpinned and eligible' : 'pinned'} for the next generation.`);
+        showMenuChange(t(wasSelected ? 'dishes.statusUnpinned' : 'dishes.statusPinned', { name: i18n.cachedTranslation(meal.name, 'meal-name') }));
       }
     });
   });
@@ -348,7 +418,7 @@ function renderPickerResults() {
 
 function selectedCountText() {
   const count = state.requiredMeals.size;
-  return `${count} selected`;
+  return t(count === 1 ? 'picker.dishes.selected.one' : 'picker.dishes.selected.many', { count });
 }
 
 function updateRequiredMealActions() {
@@ -365,31 +435,31 @@ function clearRequiredMeals() {
   renderPickerResults();
   renderCurrentMeals();
   if (state.currentPlan && clearedCount > 0) {
-    showMenuChange(`${clearedCount} pinned ${clearedCount === 1 ? 'dish is' : 'dishes are'} eligible again for the next generation.`);
+    showMenuChange(t(clearedCount === 1 ? 'dishes.statusCleared.one' : 'dishes.statusCleared.many', { count: clearedCount }));
   }
 }
 
 function renderRequiredMeals() {
   const meals = [...state.requiredMeals.values()].sort((a, b) => a.name.localeCompare(b.name));
   if (!meals.length) {
-    requiredMealsRoot.innerHTML = '<p class="empty-selection">No specific dishes selected.</p>';
+    requiredMealsRoot.innerHTML = `<p class="empty-selection">${escapeHtml(t('dishes.noneSelected'))}</p>`;
     updateRequiredMealActions();
     return;
   }
 
   requiredMealsRoot.innerHTML = meals.map(meal => {
     const conflicts = mealConstraintConflicts(meal);
-    const categories = (meal.categoryIds || []).map(categoryLabel).filter(Boolean);
+    const categories = (meal.categoryIds || []).map(categoryMeta).filter(Boolean);
     return `
       <div class="selected-meal-row ${conflicts.length ? 'conflict' : ''}">
         <div class="selected-meal-main">
-          <strong>${escapeHtml(meal.name)}</strong>
+          <strong>${dynamic(meal.name, 'meal-name')}</strong>
           <div class="selected-meal-meta">
-            ${categories.slice(0, 3).map(label => `<span>${escapeHtml(label)}</span>`).join('<span>·</span>')}
+            ${categories.slice(0, 3).map(category => `<span class="selected-category">${visualIcon(category.icon, 'inline-icon')} ${dynamic(category.label, 'meal-category')}</span>`).join('<span>·</span>')}
           </div>
-          ${conflicts.length ? `<p class="selected-meal-warning">⚠ Constraint exception: ${escapeHtml(conflictSummary(conflicts))}. This dish will still be included.</p>` : ''}
+          ${conflicts.length ? `<p class="selected-meal-warning">⚠ ${escapeHtml(t('dishes.pinnedCoverage', { details: conflictSummary(conflicts) }))}</p>` : ''}
         </div>
-        <button class="remove-meal" type="button" data-remove-meal-id="${escapeHtml(meal.id)}" aria-label="Remove ${escapeHtml(meal.name)}"><span aria-hidden="true">×</span> Remove</button>
+        <button class="remove-meal" type="button" data-remove-meal-id="${escapeHtml(meal.id)}" aria-label="Remove ${escapeHtml(meal.name)}"><span aria-hidden="true">×</span> ${escapeHtml(t('common.remove'))}</button>
       </div>
     `;
   }).join('');
@@ -411,24 +481,38 @@ function renderRequiredMeals() {
 }
 
 function mealConstraintConflicts(meal) {
-  // Dietary guest counts are allocation minimums, not per-meal hard constraints.
-  return [];
+  const supported = normalizedSet(meal.dietaryCapabilities);
+  const counts = dietaryGuestCounts();
+  return state.constraints.map(constraint => {
+    const capability = String(constraint.dietaryCapability || constraint.requiredCapabilities?.[0] || constraint.id)
+      .trim().toLowerCase();
+    const guestCount = counts[capability] || 0;
+    if (!guestCount || supported.has(capability)) return null;
+    return { constraint, constraintLabel: constraint.label, capability, guestCount };
+  }).filter(Boolean);
 }
 
 function conflictSummary(conflicts) {
-  return conflicts.map(conflict => conflict.constraint?.label || conflict.constraintLabel).join(', ');
+  return conflicts.map(conflict => {
+    const sourceLabel = conflict.constraint?.label || conflict.constraintLabel || humanize(conflict.capability);
+    const label = i18n.cachedTranslation(sourceLabel, 'dietary-label');
+    return conflict.guestCount ? `${label} (${conflict.guestCount} ${t('constraints.guests')})` : label;
+  }).join(', ');
 }
 
 function serverConflictDetails(conflict) {
+  const translatedList = (values, context) => (values || [])
+    .map(value => i18n.cachedTranslation(humanize(value), context))
+    .join(', ');
   const parts = [];
   if (conflict.missingRequiredCapabilities?.length) {
-    parts.push(`does not meet ${conflict.missingRequiredCapabilities.map(humanize).join(', ')}`);
+    parts.push(t('conflict.missing', { items: translatedList(conflict.missingRequiredCapabilities, 'capability') }));
   }
   if (conflict.excludedCapabilities?.length) {
-    parts.push(`has excluded ${conflict.excludedCapabilities.map(humanize).join(', ')}`);
+    parts.push(t('conflict.excluded', { items: translatedList(conflict.excludedCapabilities, 'capability') }));
   }
   if (conflict.excludedConcepts?.length) {
-    parts.push(`contains ${conflict.excludedConcepts.map(humanize).join(', ')}`);
+    parts.push(t('conflict.contains', { items: translatedList(conflict.excludedConcepts, 'ingredient-name') }));
   }
   return parts.join('; ');
 }
@@ -436,7 +520,7 @@ function serverConflictDetails(conflict) {
 function applyTemplate() {
   const template = state.templates.find(item => item.id === templateSelect.value);
   if (!template) return;
-  description.textContent = template.description;
+  i18n.setDynamicText(description, template.description, 'event-description');
   renderWeights(template.weights);
   mealCountInput.value = template.defaults?.mealCount == null ? '' : String(template.defaults.mealCount);
 }
@@ -447,23 +531,27 @@ function renderWeights(weights) {
     const descriptionId = `priority-${priority.id.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
     return `
       <label class="weight">
-        <span class="weight-header"><strong>${escapeHtml(priority.label)}</strong><output>${Math.round(value * 100)}%</output></span>
+        <span class="weight-header"><strong>${dynamic(priority.label, 'priority-label')}</strong><output>${Math.round(value * 100)}%</output></span>
         <input class="weight-input" data-key="${escapeHtml(priority.id)}" type="range" min="0" max="1" step="0.05" value="${value}" aria-describedby="${escapeHtml(descriptionId)}">
-        <small id="${escapeHtml(descriptionId)}" class="weight-description">${escapeHtml(priority.description)}</small>
-        <span class="weight-scale"><i>${escapeHtml(priority.lowLabel || 'Lower')}</i><i>${escapeHtml(priority.highLabel || 'Higher')}</i></span>
+        <small id="${escapeHtml(descriptionId)}" class="weight-description">${dynamic(priority.description, 'priority-description')}</small>
+        <span class="weight-scale"><i>${priority.lowLabel ? dynamic(priority.lowLabel, 'priority-scale') : escapeHtml(t('common.lower'))}</i><i>${priority.highLabel ? dynamic(priority.highLabel, 'priority-scale') : escapeHtml(t('common.higher'))}</i></span>
       </label>
     `;
   }).join('');
   document.querySelectorAll('.weight-input').forEach(input => {
-    input.addEventListener('input', () => {
-      input.closest('.weight').querySelector('output').value = `${Math.round(Number(input.value) * 100)}%`;
-    });
+    const syncSlider = () => {
+      const percentage = Math.round(Number(input.value) * 100);
+      input.style.setProperty('--range-progress', `${percentage}%`);
+      input.closest('.weight').querySelector('output').value = `${percentage}%`;
+    };
+    syncSlider();
+    input.addEventListener('input', syncSlider);
   });
 }
 
 function renderInventoryEmptyState() {
-  if (!inventoryRows.children.length) {
-    inventoryRows.innerHTML = '<p class="empty-row">No existing stock added.</p>';
+  if (!inventoryRows.querySelector('.inventory-row')) {
+    inventoryRows.innerHTML = `<p class="empty-row" data-i18n="stock.none">${escapeHtml(t('stock.none'))}</p>`;
   }
 }
 
@@ -489,24 +577,25 @@ async function searchInventoryConcepts() {
   const params = new URLSearchParams({ limit: '50' });
   const query = inventoryPickerSearch.value.trim();
   if (query) params.set('query', query);
-  inventoryPickerStatus.textContent = 'Searching ingredients…';
+  inventoryPickerStatus.textContent = t('picker.stock.searching');
 
   try {
-    const options = await fetchJson(`/api/inventory-concepts/search?${params.toString()}`);
+    params.set('language', i18n.language);
+    const options = await fetchJson(`/api/i18n/inventory-concepts/search?${params.toString()}`);
     if (token !== state.inventoryPickerSearchToken) return;
     state.inventoryPickerOptions = options;
-    inventoryPickerStatus.textContent = `${options.length} ingredient${options.length === 1 ? '' : 's'}${query ? ` matching “${query}”` : ''}`;
+    inventoryPickerStatus.textContent = `${t(options.length === 1 ? 'picker.stock.count.one' : 'picker.stock.count.many', { count: options.length })}${query ? ` · ${t('picker.stock.matching', { query })}` : ''}`;
     renderInventoryPickerResults();
   } catch (error) {
     if (token !== state.inventoryPickerSearchToken) return;
-    inventoryPickerStatus.textContent = 'Ingredient search failed.';
+    inventoryPickerStatus.textContent = t('picker.stock.failed');
     inventoryPickerResults.innerHTML = `<div class="picker-empty">${escapeHtml(error.message)}</div>`;
   }
 }
 
 function renderInventoryPickerResults() {
   if (!state.inventoryPickerOptions.length) {
-    inventoryPickerResults.innerHTML = '<div class="picker-empty">No ingredients match this search.</div>';
+    inventoryPickerResults.innerHTML = `<div class="picker-empty">${escapeHtml(t('picker.stock.none'))}</div>`;
     return;
   }
 
@@ -516,11 +605,11 @@ function renderInventoryPickerResults() {
     return `
       <article class="inventory-option-card ${selected ? 'selected' : ''}">
         <div>
-          <h3>${escapeHtml(option.label)}</h3>
-          <p>${escapeHtml(option.concept)} · suggested unit ${escapeHtml(option.suggestedUnit)}</p>
+          <h3>${dynamic(option.label, 'ingredient-name')}</h3>
+          <p>${escapeHtml(option.concept)} · ${escapeHtml(t('stock.suggestedUnit', { unit: i18n.unitLabel(option.suggestedUnit, 2) }))}</p>
         </div>
         <button class="picker-add ${selected ? 'added' : ''}" type="button" data-inventory-concept="${escapeHtml(option.concept)}">
-          ${selected ? 'Selected' : 'Use ingredient'}
+          ${selected ? escapeHtml(t('common.selected')) : escapeHtml(t('picker.stock.use'))}
         </button>
       </article>
     `;
@@ -538,7 +627,7 @@ function renderInventoryPickerResults() {
 
 function setInventoryConcept(row, option) {
   row.querySelector('.inventory-concept').value = option.concept;
-  row.querySelector('.inventory-concept-label').textContent = option.label;
+  i18n.setDynamicText(row.querySelector('.inventory-concept-label'), option.label, 'ingredient-name');
   row.querySelector('.inventory-concept-id').textContent = option.concept;
   row.querySelector('.inventory-concept-button').classList.add('selected');
   const unitSelect = row.querySelector('.inventory-unit');
@@ -554,29 +643,29 @@ function addInventoryRow(item = { concept: '', amount: '', unit: 'piece' }) {
   const hasConcept = Boolean(item.concept);
   row.innerHTML = `
     <div class="inventory-cell inventory-concept-cell">
-      <span>Ingredient</span>
+      <span data-i18n="stock.ingredient">${escapeHtml(t('stock.ingredient'))}</span>
       <input class="inventory-concept" type="hidden" value="${escapeHtml(item.concept)}">
       <button class="inventory-concept-button ${hasConcept ? 'selected' : ''}" type="button" aria-label="Choose stock ingredient">
         <span>
-          <strong class="inventory-concept-label">${hasConcept ? escapeHtml(humanize(item.concept)) : 'Choose ingredient'}</strong>
-          <small class="inventory-concept-id">${hasConcept ? escapeHtml(item.concept) : 'Search the catalog'}</small>
+          <strong class="inventory-concept-label">${hasConcept ? dynamic(humanize(item.concept), 'ingredient-name') : escapeHtml(t('stock.chooseIngredient'))}</strong>
+          <small class="inventory-concept-id">${hasConcept ? escapeHtml(item.concept) : escapeHtml(t('stock.searchCatalog'))}</small>
         </span>
-        <b>${hasConcept ? 'Change' : 'Choose'}</b>
+        <b>${hasConcept ? escapeHtml(t('stock.change')) : escapeHtml(t('stock.choose'))}</b>
       </button>
     </div>
     <label class="inventory-cell">
-      <span>Amount</span>
+      <span data-i18n="stock.amount">${escapeHtml(t('stock.amount'))}</span>
       <input class="inventory-amount" aria-label="Inventory amount" type="number" min="0" step="0.1" inputmode="decimal" placeholder="0" value="${escapeHtml(item.amount)}">
     </label>
     <label class="inventory-cell">
-      <span>Unit</span>
+      <span data-i18n="stock.unit">${escapeHtml(t('stock.unit'))}</span>
       <select class="inventory-unit" aria-label="Inventory unit">
         ${['piece', 'g', 'kg', 'liter', 'ml', 'cup', 'bottle'].map(unit =>
           `<option value="${unit}" ${item.unit === unit ? 'selected' : ''}>${unit}</option>`
         ).join('')}
       </select>
     </label>
-    <button class="remove-inventory" type="button" aria-label="Remove inventory item"><span aria-hidden="true">×</span> Remove</button>
+    <button class="remove-inventory" type="button" aria-label="Remove inventory item"><span aria-hidden="true">×</span> ${escapeHtml(t('common.remove'))}</button>
   `;
   row.querySelector('.inventory-concept-button').addEventListener('click', () => openInventoryPicker(row));
   row.querySelector('.remove-inventory').addEventListener('click', () => {
@@ -646,9 +735,10 @@ async function resolvePlan(event) {
 
 function renderPlan(plan) {
   const foodAmount = plan.event.servingsPerGuest == null
-    ? 'template portions'
-    : `${plan.event.servingsPerGuest} servings each`;
-  document.querySelector('#result-title').textContent = `${plan.event.templateName} for ${plan.event.guestCount} guests · ${foodAmount}.`;
+    ? t('plan.templatePortions')
+    : t('plan.servingsEach', { count: plan.event.servingsPerGuest });
+  const resultTitle = document.querySelector('#result-title');
+  resultTitle.innerHTML = `${dynamic(plan.event.templateName, 'event-name')} ${escapeHtml(t('plan.forGuests', { template: '', guests: plan.event.guestCount, portions: foodAmount }).trim())}`;
   renderConstraintWarningSummary(plan.constraintConflicts || []);
   renderWarnings(plan.warnings || []);
   renderTotals(plan.totals);
@@ -666,26 +756,27 @@ function renderConstraintWarningSummary(conflicts) {
     return;
   }
   const guaranteed = conflicts.filter(conflict => conflict.guaranteed);
+  const affectedMealCount = new Set(guaranteed.map(conflict => conflict.mealId)).size;
   target.innerHTML = `
-    <strong>⚠ ${conflicts.length} dietary constraint exception${conflicts.length === 1 ? '' : 's'} in this plan</strong>
-    <p>${guaranteed.length
-      ? `${guaranteed.length} exception${guaranteed.length === 1 ? '' : 's'} come from dishes you explicitly guaranteed. They remain in the plan, but should be reviewed before service.`
-      : 'Review the highlighted recipes before service.'}</p>
+    <strong>${escapeHtml(t((affectedMealCount || conflicts.length) === 1 ? 'warning.pinnedTitle.one' : 'warning.pinnedTitle.many', { count: affectedMealCount || conflicts.length }))}</strong>
+    <p>${escapeHtml(affectedMealCount
+      ? t(affectedMealCount === 1 ? 'warning.pinnedBody.one' : 'warning.pinnedBody.many', { count: affectedMealCount })
+      : t('warning.review'))}</p>
   `;
 }
 
 function renderWarnings(warnings) {
   const element = document.querySelector('#warnings');
   element.hidden = !warnings.length;
-  element.innerHTML = warnings.map(warning => `<div>${escapeHtml(warning)}</div>`).join('');
+  element.innerHTML = warnings.map(warning => `<div>${dynamic(warning, 'planner-warning')}</div>`).join('');
 }
 
 function renderTotals(totals) {
   const difference = totals.budgetDifference.amount;
-  const differenceLabel = difference >= 0 ? 'Budget remaining' : 'Budget overrun';
+  const differenceLabel = difference >= 0 ? t('results.budgetRemaining') : t('results.budgetOverrun');
   document.querySelector('#totals').innerHTML = `
-    <div class="total-card"><span>Total cost</span><strong>${formatMoney(totals.totalCost.amount)}</strong></div>
-    <div class="total-card"><span>Cost per guest</span><strong>${formatMoney(totals.costPerGuest.amount)}</strong></div>
+    <div class="total-card"><span>${escapeHtml(t('results.totalCost'))}</span><strong>${formatMoney(totals.totalCost.amount)}</strong></div>
+    <div class="total-card"><span>${escapeHtml(t('results.costPerGuest'))}</span><strong>${formatMoney(totals.costPerGuest.amount)}</strong></div>
     <div class="total-card ${difference < 0 ? 'negative' : ''}"><span>${differenceLabel}</span><strong>${formatMoney(Math.abs(difference))}</strong></div>
   `;
 }
@@ -709,35 +800,35 @@ function renderMeals(meals, conflicts) {
       <article class="meal-card ${mealConflicts.length ? 'conflict' : ''} ${isPinned ? 'pinned' : ''}">
         <div class="meal-top">
           <div>
-            <h4>${escapeHtml(meal.name)}</h4>
-            <span class="requirement">${escapeHtml(humanize(meal.requirementId))}</span>
-            ${isPinned ? '<br><span class="guaranteed-badge">Pinned</span>' : ''}
-            ${mealConflicts.length ? '<span class="conflict-badge">Constraint exception</span>' : ''}
+            <h4>${dynamic(meal.name, 'meal-name')}</h4>
+            <span class="requirement">${dynamic(humanize(meal.requirementId), 'requirement')}</span>
+            ${isPinned ? `<br><span class="guaranteed-badge">${escapeHtml(t('dishes.pinned'))}</span>` : ''}
+            ${mealConflicts.length ? `<span class="conflict-badge">${escapeHtml(t('dishes.constraintException'))}</span>` : ''}
           </div>
-          <span class="score" title="Weighted score">${Math.round(meal.finalWeightedScore * 100)}</span>
+          <span class="score" title="${escapeHtml(t('results.weightedScore'))}">${Math.round(meal.finalWeightedScore * 100)}</span>
         </div>
         <div class="meal-actions" role="group" aria-label="Actions for ${escapeHtml(meal.name)}">
           <button class="meal-pin" type="button" data-pin-meal-id="${escapeHtml(meal.mealId)}"
             aria-pressed="${isPinned}" aria-label="${isPinned ? 'Unpin' : 'Pin'} ${escapeHtml(meal.name)}"
-            title="${isPinned ? 'Allow this dish to change next time' : 'Keep this dish in the next menu'}">
-            <span aria-hidden="true">📌</span><span class="meal-action-label">${isPinned ? 'Unpin' : 'Pin'}</span>
+            title="${escapeHtml(isPinned ? t('dishes.allowChangeTitle') : t('dishes.keepTitle'))}">
+            <span aria-hidden="true">📌</span><span class="meal-action-label">${escapeHtml(isPinned ? t('dishes.unpin') : t('dishes.pin'))}</span>
           </button>
           <button class="meal-reject" type="button" data-reject-meal-id="${escapeHtml(meal.mealId)}"
             aria-label="Remove ${escapeHtml(meal.name)} from future generations"
-            title="Remove this dish and exclude it from the next menu">
-            <span aria-hidden="true">×</span><span class="meal-action-label">Remove</span>
+            title="${escapeHtml(t('dishes.removeTitle'))}">
+            <span aria-hidden="true">×</span><span class="meal-action-label">${escapeHtml(t('dishes.removeNext'))}</span>
           </button>
         </div>
-        ${mealConflicts.length ? `<div class="meal-conflict-box"><strong>Review before service:</strong> ${escapeHtml(conflictText)}</div>` : ''}
+        ${mealConflicts.length ? `<div class="meal-conflict-box"><strong>${escapeHtml(t('dishes.review'))}</strong> ${dynamic(conflictText, 'dietary-warning')}</div>` : ''}
         <div class="chips">
-          ${(meal.matchedCapabilities || []).map(capability => `<span class="chip">${escapeHtml(humanize(capability))}</span>`).join('')}
-          ${(meal.matchedDietaryCapabilities || []).map(capability => `<span class="chip dietary">${escapeHtml(humanize(capability))} coverage</span>`).join('')}
+          ${(meal.matchedCapabilities || []).map(capability => `<span class="chip">${dynamic(humanize(capability), 'capability')}</span>`).join('')}
+          ${(meal.matchedDietaryCapabilities || []).map(capability => `<span class="chip dietary">${dynamic(humanize(capability), 'dietary-label')}</span>`).join('')}
         </div>
-        <div class="meal-meta"><span>${meal.servings} servings</span><span>${quantity(meal.targetQuantity)} target</span></div>
+        <div class="meal-meta"><span>${escapeHtml(t('results.servings', { count: meal.servings }))}</span><span>${escapeHtml(t('results.target', { quantity: quantity(meal.targetQuantity) }))}</span></div>
         <details class="score-details">
-          <summary>Why this was selected</summary>
+          <summary>${escapeHtml(t('dishes.why'))}</summary>
           <div class="score-components">${priorityEntries(meal.scoreComponents).map(([key, value]) =>
-            `<span><i>${escapeHtml(priorityDefinition(key).label)}</i><b>${Math.round(value * 100)}</b></span>`
+            `<span><i>${dynamic(priorityDefinition(key).label, 'priority-label')}</i><b>${Math.round(value * 100)}</b></span>`
           ).join('')}</div>
         </details>
       </article>
@@ -786,7 +877,7 @@ function togglePinnedMeal(mealId) {
   renderPickerResults();
   renderExcludedMeals();
   renderCurrentMeals();
-  showMenuChange(`${meal.name} ${wasPinned ? 'unpinned and eligible' : 'pinned'} for the next generation.`);
+  showMenuChange(t(wasPinned ? 'dishes.statusUnpinned' : 'dishes.statusPinned', { name: i18n.cachedTranslation(meal.name, 'meal-name') }));
 }
 
 function rejectMeal(mealId) {
@@ -802,7 +893,7 @@ function rejectMeal(mealId) {
   renderPickerResults();
   renderExcludedMeals();
   renderCurrentMeals();
-  showMenuChange(`${meal.name} removed from this menu and excluded from the next generation.`, true);
+  showMenuChange(t('dishes.statusRemoved', { name: i18n.cachedTranslation(meal.name, 'meal-name') }), true);
 }
 
 function renderExcludedMeals() {
@@ -816,11 +907,11 @@ function renderExcludedMeals() {
   }
 
   excludedMealsRoot.innerHTML = `
-    <strong>Excluded from next generation</strong>
+    <strong>${escapeHtml(t('results.menuChanged'))}</strong>
     <div class="excluded-meal-list">${excluded.map(meal => `
       <span class="excluded-meal-chip">
-        ${escapeHtml(meal.name)}
-        <button type="button" data-undo-exclusion="${escapeHtml(meal.id)}" aria-label="Allow ${escapeHtml(meal.name)} in future generations">Undo</button>
+        ${dynamic(meal.name, 'meal-name')}
+        <button type="button" data-undo-exclusion="${escapeHtml(meal.id)}" aria-label="Allow ${escapeHtml(meal.name)} in future generations">${escapeHtml(t('common.undo'))}</button>
       </span>
     `).join('')}</div>
   `;
@@ -832,7 +923,7 @@ function renderExcludedMeals() {
       state.excludedMealIds.delete(mealId);
       state.excludedMealNames.delete(mealId);
       renderExcludedMeals();
-      showMenuChange(`${mealName} is eligible again for the next generation.`);
+      showMenuChange(t('dishes.statusEligibleAgain', { name: i18n.cachedTranslation(mealName, 'meal-name') }));
     });
   });
 }
@@ -847,8 +938,8 @@ function showMenuChange(message, stale = false) {
   if (stale) state.planIsStale = true;
   menuChangeStatus.hidden = false;
   menuChangeStatus.innerHTML = `
-    <strong>${escapeHtml(message)}</strong>
-    ${state.planIsStale ? '<span>Menu changed — regenerate to update quantities and costs.</span>' : '<span>Use Regenerate menu to apply this choice.</span>'}
+    <strong>${dynamic(message, 'ui-status')}</strong>
+    <span>${escapeHtml(state.planIsStale ? t('results.menuChanged') : t('results.applyChoice'))}</span>
   `;
 }
 
@@ -861,13 +952,13 @@ function clearMenuChangeStatus() {
 function renderShoppingItems(items) {
   document.querySelector('#shopping-items').innerHTML = items.map(item => `
     <tr>
-      <td data-label="Item"><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.sku)}${item.originCountry ? ` · Origin ${escapeHtml(item.originCountry)}` : ''} · ${quantity(item.packageSize)} / pack</small></td>
-      <td data-label="Need">${quantity(item.requiredQuantity)}</td>
-      <td data-label="Stock used">${item.inventoryUsed.amount ? quantity(item.inventoryUsed) : '—'}</td>
-      <td data-label="Packages" class="${item.packageCount === 0 ? 'covered' : ''}">${item.packageCount === 0 ? 'Covered' : item.packageCount}</td>
-      <td data-label="Purchased">${quantity(item.purchasedQuantity)}</td>
-      <td data-label="Overbuy">${item.overbuyQuantity.amount ? quantity(item.overbuyQuantity) : '—'}</td>
-      <td data-label="Total"><strong>${formatMoney(item.lineTotal.amount)}</strong></td>
+      <td data-label="${escapeHtml(t('table.item'))}"><strong>${dynamic(item.name, 'product-name')}</strong><small>${escapeHtml(item.sku)}${item.originCountry ? ` · ${escapeHtml(t('table.origin'))} ${escapeHtml(item.originCountry)}` : ''} · ${quantity(item.packageSize)} / ${escapeHtml(t('table.pack'))}</small></td>
+      <td data-label="${escapeHtml(t('table.need'))}">${quantity(item.requiredQuantity)}</td>
+      <td data-label="${escapeHtml(t('table.stockUsed'))}">${item.inventoryUsed.amount ? quantity(item.inventoryUsed) : '—'}</td>
+      <td data-label="${escapeHtml(t('table.packages'))}" class="${item.packageCount === 0 ? 'covered' : ''}">${item.packageCount === 0 ? escapeHtml(t('results.covered')) : item.packageCount}</td>
+      <td data-label="${escapeHtml(t('table.purchased'))}">${quantity(item.purchasedQuantity)}</td>
+      <td data-label="${escapeHtml(t('table.overbuy'))}">${item.overbuyQuantity.amount ? quantity(item.overbuyQuantity) : '—'}</td>
+      <td data-label="${escapeHtml(t('table.total'))}"><strong>${formatMoney(item.lineTotal.amount)}</strong></td>
     </tr>
   `).join('');
 }
@@ -875,20 +966,20 @@ function renderShoppingItems(items) {
 function renderInventory(items) {
   const target = document.querySelector('#inventory-used');
   target.innerHTML = items.length ? items.map(item => `
-    <div class="stock-item"><span>${escapeHtml(humanize(item.concept))}</span><strong>${quantity(item.quantity)}</strong></div>
-  `).join('') : '<p class="stock-empty">No existing inventory matched this plan.</p>';
+    <div class="stock-item"><span>${dynamic(humanize(item.concept), 'ingredient-name')}</span><strong>${quantity(item.quantity)}</strong></div>
+  `).join('') : `<p class="stock-empty">${escapeHtml(t('results.noStockMatched'))}</p>`;
 }
 
 function renderTrace(requirements) {
   document.querySelector('#requirement-trace').innerHTML = requirements.map(item => `
-    <div class="trace-item"><strong>${escapeHtml(humanize(item.requirementId))}</strong><br>
-      <span>${escapeHtml(item.selectedCandidateName || 'Not fulfilled')} · ${quantity(item.targetQuantity)} · ${(item.matchedCapabilities || []).map(value => escapeHtml(humanize(value))).join(', ')}</span>
+    <div class="trace-item"><strong>${dynamic(humanize(item.requirementId), 'requirement')}</strong><br>
+      <span>${item.selectedCandidateName ? dynamic(item.selectedCandidateName, item.type === 'meal' ? 'meal-name' : 'product-name') : escapeHtml(t('results.notFulfilled'))} · ${quantity(item.targetQuantity)} · ${(item.matchedCapabilities || []).map(value => dynamic(humanize(value), 'capability')).join(', ')}</span>
     </div>
   `).join('');
 }
 
 async function loadDeveloperCatalog() {
-  document.querySelector('#catalog-count').textContent = 'Loading catalog…';
+  document.querySelector('#catalog-count').textContent = t('catalog.loading');
   try {
     [state.meals, state.products] = await Promise.all([
       fetchJson('/api/meals'),
@@ -900,7 +991,7 @@ async function loadDeveloperCatalog() {
     renderCatalogCapabilities();
     renderCatalog();
   } catch (error) {
-    document.querySelector('#catalog-count').textContent = 'Catalog failed to load.';
+    document.querySelector('#catalog-count').textContent = t('catalog.failed');
     catalogResults.innerHTML = `<div class="catalog-empty">${escapeHtml(error.message)}</div>`;
   }
 }
@@ -922,7 +1013,7 @@ function fallbackPriority(id) {
   return {
     id,
     label: humanize(id),
-    description: 'Catalog-defined planning score.',
+    description: t('catalog.scoreFallback'),
     displayOrder: Number.MAX_SAFE_INTEGER,
     defaultWeight: 0,
     lowLabel: 'Lower',
@@ -947,8 +1038,8 @@ function renderCatalogCapabilities() {
     ...(item.dietaryCapabilities || [])
   ]))].sort();
   catalogCapability.innerHTML = [
-    '<option value="">All capabilities</option>',
-    ...capabilities.map(capability => `<option value="${escapeHtml(capability)}">${escapeHtml(humanize(capability))}</option>`)
+    `<option value="">${escapeHtml(t('catalog.allCapabilities'))}</option>`,
+    ...capabilities.map(capability => `<option value="${escapeHtml(capability)}" ${i18n.dynamicOptionAttributes(humanize(capability), 'capability')}>${escapeHtml(humanize(capability))}</option>`)
   ].join('');
 }
 
@@ -964,11 +1055,12 @@ function renderCatalog() {
     return matchesCapability && (!query || catalogSearchText(item).includes(query));
   });
 
-  const noun = state.catalogType === 'meals' ? 'recipe' : 'item';
-  document.querySelector('#catalog-count').textContent = `${filtered.length} ${noun}${filtered.length === 1 ? '' : 's'} shown`;
+  const nounKey = state.catalogType === 'meals' ? 'catalog.recipe' : 'catalog.item';
+  const noun = t(nounKey);
+  document.querySelector('#catalog-count').textContent = t(filtered.length === 1 ? 'catalog.shown.one' : 'catalog.shown.many', { count: filtered.length, noun });
   catalogResults.innerHTML = filtered.length
     ? filtered.map(item => state.catalogType === 'meals' ? recipeCard(item) : productCard(item)).join('')
-    : `<div class="catalog-empty">No ${noun}s match this search and filter.</div>`;
+    : `<div class="catalog-empty">${escapeHtml(t('catalog.noMatches', { noun }))}</div>`;
 }
 
 function catalogSearchText(item) {
@@ -976,8 +1068,10 @@ function catalogSearchText(item) {
   return [
     item.id,
     item.name,
+    i18n.cachedTranslation(item.name, state.catalogType === 'meals' ? 'meal-name' : 'product-name'),
     item.sku,
     item.concept,
+    i18n.cachedTranslation(humanize(item.concept || ''), 'ingredient-name'),
     item.originCountry,
     ...(item.categoryIds || []),
     ...(item.capabilities || []),
@@ -988,20 +1082,20 @@ function catalogSearchText(item) {
 
 function recipeCard(meal) {
   const ingredients = meal.ingredients.map(ingredient => `
-    <li><span>${escapeHtml(humanize(ingredient.concept))}</span><strong>${formatAmount(ingredient.amountPerServing)} ${escapeHtml(ingredient.unit)}</strong></li>
+    <li><span>${dynamic(humanize(ingredient.concept), 'ingredient-name')}</span><strong>${formatAmount(ingredient.amountPerServing)} ${escapeHtml(i18n.unitLabel(ingredient.unit, ingredient.amountPerServing))}</strong></li>
   `).join('');
   const categories = (meal.categoryIds || []).map(categoryLabel).filter(Boolean);
   return `
     <article class="catalog-card recipe-card">
       <div class="catalog-card-heading">
-        <div><p>Recipe · ${escapeHtml(meal.id)}</p><h3>${escapeHtml(meal.name)}</h3></div>
-        <span>${formatAmount(meal.serving.piecesPerServing)} ${meal.serving.piecesPerServing === 1 ? 'piece' : 'pieces'} / serving</span>
+        <div><p>${escapeHtml(t('catalog.recipe'))} · ${escapeHtml(meal.id)}</p><h3>${dynamic(meal.name, 'meal-name')}</h3></div>
+        <span>${formatAmount(meal.serving.piecesPerServing)} ${escapeHtml(i18n.unitLabel('piece', meal.serving.piecesPerServing))} / ${escapeHtml(i18n.unitLabel('serving', 1))}</span>
       </div>
-      ${categories.length ? `<div class="chips catalog-chips">${categories.map(label => `<span class="chip">${escapeHtml(label)}</span>`).join('')}</div>` : ''}
+      ${categories.length ? `<div class="chips catalog-chips">${categories.map(label => `<span class="chip">${dynamic(label, 'meal-category')}</span>`).join('')}</div>` : ''}
       ${capabilityChips(meal.capabilities)}
       ${dietaryCapabilityChips(meal.dietaryCapabilities)}
       <div class="catalog-card-body">
-        <h4>Ingredients per serving</h4>
+        <h4>${escapeHtml(t('catalog.ingredientsPerServing'))}</h4>
         <ul class="ingredient-list">${ingredients}</ul>
       </div>
       ${catalogScores(meal.scores)}
@@ -1011,20 +1105,20 @@ function recipeCard(meal) {
 
 function productCard(product) {
   const conversion = product.conversion
-    ? `<span>Yields ${formatAmount(product.package.amount / product.conversion.amountPerServing)} ${escapeHtml(product.conversion.servingUnit)}s</span>`
+    ? `<span>${escapeHtml(t('catalog.yields', { count: formatAmount(product.package.amount / product.conversion.amountPerServing), unit: i18n.unitLabel(product.conversion.servingUnit, 2) }))}</span>`
     : '';
   return `
     <article class="catalog-card product-card">
       <div class="catalog-card-heading">
-        <div><p>Item · ${escapeHtml(product.sku)}</p><h3>${escapeHtml(product.name)}</h3></div>
+        <div><p>${escapeHtml(t('catalog.item'))} · ${escapeHtml(product.sku)}</p><h3>${dynamic(product.name, 'product-name')}</h3></div>
         <span>${formatMoney(product.price.amount)}</span>
       </div>
       ${capabilityChips(product.capabilities)}
       ${dietaryCapabilityChips(product.dietaryCapabilities)}
       <dl class="product-facts">
-        <div><dt>Concept</dt><dd>${escapeHtml(humanize(product.concept))}</dd></div>
-        <div><dt>Package</dt><dd>${quantity(product.package)}</dd></div>
-        <div><dt>Origin</dt><dd>${escapeHtml(product.originCountry || 'Unspecified')}</dd></div>
+        <div><dt>${escapeHtml(t('catalog.concept'))}</dt><dd>${dynamic(humanize(product.concept), 'ingredient-name')}</dd></div>
+        <div><dt>${escapeHtml(t('catalog.package'))}</dt><dd>${quantity(product.package)}</dd></div>
+        <div><dt>${escapeHtml(t('catalog.origin'))}</dt><dd>${escapeHtml(product.originCountry || t('catalog.unspecified'))}</dd></div>
       </dl>
       ${conversion ? `<div class="conversion-note">${conversion}</div>` : ''}
       ${catalogScores(product.scores)}
@@ -1034,14 +1128,14 @@ function productCard(product) {
 
 function capabilityChips(capabilities) {
   return `<div class="chips catalog-chips">${(capabilities || []).map(capability =>
-    `<span class="chip">${escapeHtml(humanize(capability))}</span>`
+    `<span class="chip">${dynamic(humanize(capability), 'capability')}</span>`
   ).join('')}</div>`;
 }
 
 function dietaryCapabilityChips(capabilities) {
   if (!(capabilities || []).length) return '';
   return `<div class="chips catalog-chips">${capabilities.map(capability =>
-    `<span class="chip dietary">${escapeHtml(humanize(capability))}</span>`
+    `<span class="chip dietary">${dynamic(humanize(capability), 'dietary-label')}</span>`
   ).join('')}</div>`;
 }
 
@@ -1050,13 +1144,13 @@ function catalogScores(scores) {
   if (!entries.length) return '';
   return `
     <details class="catalog-scores">
-      <summary>Planning scores</summary>
+      <summary>${escapeHtml(t('catalog.planningScores'))}</summary>
       <div class="catalog-score-list">${entries.map(([key, value]) => {
         const priority = priorityDefinition(key);
         const normalized = clamp(Number(value), 0, 1);
         return `
-          <div class="catalog-score" title="${escapeHtml(priority.description)}">
-            <span><i>${escapeHtml(priority.label)}</i><b>${Math.round(normalized * 100)}</b></span>
+          <div class="catalog-score" title="${escapeHtml(i18n.cachedTranslation(priority.description, 'priority-description'))}">
+            <span><i>${dynamic(priority.label, 'priority-label')}</i><b>${Math.round(normalized * 100)}</b></span>
             <progress max="1" value="${normalized}">${Math.round(normalized * 100)}%</progress>
           </div>
         `;
@@ -1065,8 +1159,41 @@ function catalogScores(scores) {
   `;
 }
 
+function categoryMeta(id) {
+  const category = state.mealCategories.find(item => item.id === id);
+  return {
+    id,
+    label: category?.label || humanize(id),
+    icon: category?.icon || fallbackIcon('category', id)
+  };
+}
+
 function categoryLabel(id) {
-  return state.mealCategories.find(category => category.id === id)?.label || humanize(id);
+  return categoryMeta(id).label;
+}
+
+function visualIcon(icon, className = 'visual-icon') {
+  const value = String(icon || '•').trim().slice(0, 4);
+  return `<span class="${escapeHtml(className)}" aria-hidden="true">${escapeHtml(value)}</span>`;
+}
+
+function fallbackIcon(kind, id) {
+  const key = String(id || '').toLowerCase();
+  const icons = {
+    event: {
+      'business-apero': '🥂', brunch: '🥞', 'coffee-break': '☕',
+      'team-lunch-buffet': '🍽️', 'vegan-reception': '🌿', 'swiss-breakfast': '🥐'
+    },
+    category: {
+      fruit: '🍓', bakery: '🥐', meat: '🍗', 'plant-based': '🌿',
+      breakfast: '🍳', lunch: '🍽️', reception: '🥂'
+    },
+    dietary: {
+      vegetarian: '🥬', vegan: '🌱', halal: 'H', 'gluten-free': 'GF',
+      'lactose-free': 'LF', 'nut-free': 'NF'
+    }
+  };
+  return icons[kind]?.[key] || (kind === 'event' ? '✦' : kind === 'category' ? '•' : '✓');
 }
 
 function normalizedSet(values) {
@@ -1083,15 +1210,15 @@ async function fetchJson(url, options) {
 function setLoading(loading) {
   generateButton.disabled = loading;
   regenerateMenuButton.disabled = loading;
-  generateButton.querySelector('span').textContent = loading ? 'Resolving plan…' : 'Generate catering plan';
-  regenerateMenuButton.textContent = loading ? 'Regenerating…' : 'Regenerate menu';
+  generateButton.querySelector('span').textContent = loading ? t('plan.resolving') : t('plan.generate');
+  regenerateMenuButton.textContent = loading ? t('plan.resolving') : t('results.regenerate');
 }
 
 function showError(message) { errorBox.textContent = message; errorBox.hidden = false; }
 function hideError() { errorBox.hidden = true; errorBox.textContent = ''; }
-function formatMoney(value) { return new Intl.NumberFormat('de-CH', { style: 'currency', currency: 'CHF' }).format(value); }
-function formatAmount(value) { return Number(value).toLocaleString('de-CH', { maximumFractionDigits: 3 }); }
-function quantity(value) { return `${Number(value.amount).toLocaleString('de-CH', { maximumFractionDigits: 3 })} ${value.unit}`; }
+function formatMoney(value) { return i18n.formatMoney(Number(value), 'CHF'); }
+function formatAmount(value) { return i18n.formatNumber(Number(value), { maximumFractionDigits: 3 }); }
+function quantity(value) { return `${i18n.formatNumber(Number(value.amount), { maximumFractionDigits: 3 })} ${i18n.unitLabel(value.unit, value.amount)}`; }
 function humanize(value) { return String(value ?? '').replace(/([a-z])([A-Z])/g, '$1 $2').replaceAll('-', ' ').replace(/\b\w/g, letter => letter.toUpperCase()); }
 function clamp(value, minimum, maximum) { return Math.min(maximum, Math.max(minimum, value)); }
 function escapeHtml(value) {

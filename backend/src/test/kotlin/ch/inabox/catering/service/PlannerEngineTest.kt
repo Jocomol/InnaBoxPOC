@@ -328,7 +328,7 @@ class PlannerEngineTest {
     }
 
     @Test
-    fun `dietary guest coverage does not globally filter a required meal`() {
+    fun `dietary guest coverage does not globally filter a required meal and reports its exceptions`() {
         val template = EventTemplate(
             templateId = "required-conflict",
             name = "Required conflict",
@@ -341,15 +341,24 @@ class PlannerEngineTest {
             setOf("savory"),
             "vegan-food",
             0.9,
-            dietaryCapabilities = setOf("vegetarian", "vegan"),
+            dietaryCapabilities = setOf("vegetarian", "vegan", "gluten-free"),
         )
         val meatMeal = meal("meat-quiche", setOf("savory"), "quiche-food", 0.8)
         val veganConstraint = DietaryConstraintDefinition(
             constraintId = "vegan",
             label = "Vegan",
             description = "Allocate vegan-compatible servings.",
+            displayOrder = 10,
             dietaryCapability = "vegan",
             requiredCapabilities = setOf("vegan"),
+        )
+        val glutenFreeConstraint = DietaryConstraintDefinition(
+            constraintId = "gluten-free",
+            label = "Gluten-free",
+            description = "Allocate gluten-free-compatible servings.",
+            displayOrder = 20,
+            dietaryCapability = "gluten-free",
+            requiredCapabilities = setOf("gluten-free"),
         )
 
         val plan = engine.resolve(
@@ -365,18 +374,69 @@ class PlannerEngineTest {
                 budget = 100.0,
                 servingsPerGuest = 1,
                 mealCount = 2,
-                dietaryShares = mapOf("vegan" to 0.5),
+                dietaryShares = mapOf("vegan" to 0.5, "gluten-free" to 0.2),
                 requiredMealIds = setOf("meat-quiche"),
             ),
-            selectedConstraints = listOf(veganConstraint),
+            selectedConstraints = listOf(veganConstraint, glutenFreeConstraint),
         )
 
         assertEquals(setOf("vegan-savory", "meat-quiche"), plan.selectedMeals.map { it.mealId }.toSet())
         assertTrue(plan.selectedMeals.single { it.mealId == "meat-quiche" }.guaranteed)
-
         assertTrue(dietaryServings(plan.selectedMeals, listOf(veganMeal, meatMeal), "vegan") >= 5)
+        assertTrue(dietaryServings(plan.selectedMeals, listOf(veganMeal, meatMeal), "gluten-free") >= 2)
+
+        val requiredMealConflicts = plan.constraintConflicts.filter { it.mealId == "meat-quiche" }
+        assertEquals(2, requiredMealConflicts.size)
+        assertEquals(setOf("vegan", "gluten-free"), requiredMealConflicts.map { it.constraintId }.toSet())
+        assertEquals(setOf("Vegan", "Gluten-free"), requiredMealConflicts.map { it.constraintLabel }.toSet())
+        assertTrue(requiredMealConflicts.all { it.guaranteed })
+        assertEquals(
+            setOf(setOf("vegan"), setOf("gluten-free")),
+            requiredMealConflicts.map { it.missingRequiredCapabilities }.toSet(),
+        )
+        assertTrue(plan.constraintConflicts.none { it.mealId == "vegan-savory" })
+        assertEquals(setOf("vegan", "gluten-free"), plan.event.selectedConstraints.map { it.id }.toSet())
+    }
+
+    @Test
+    fun `dietary-compatible guaranteed meal does not create a warning conflict`() {
+        val template = broadMealTemplate()
+        val veganMeal = meal(
+            "guaranteed-vegan",
+            setOf("savory"),
+            "vegan-food",
+            0.6,
+            dietaryCapabilities = setOf("vegetarian", "vegan"),
+        )
+        val plainMeal = meal("plain", setOf("savory"), "plain-food", 1.0)
+        val veganConstraint = DietaryConstraintDefinition(
+            constraintId = "vegan",
+            label = "Vegan",
+            description = "Allocate vegan-compatible servings.",
+            dietaryCapability = "vegan",
+            requiredCapabilities = setOf("vegan"),
+        )
+        val meals = listOf(veganMeal, plainMeal)
+
+        val plan = engine.resolve(
+            template,
+            meals,
+            productsFor(meals),
+            ResolvePlanRequest(
+                templateId = template.templateId,
+                guestCount = 10,
+                budget = 1_000.0,
+                servingsPerGuest = 1,
+                mealCount = 2,
+                dietaryShares = mapOf("vegan" to 0.5),
+                requiredMealIds = setOf("guaranteed-vegan"),
+            ),
+            selectedConstraints = listOf(veganConstraint),
+        )
+
+        assertTrue(plan.selectedMeals.single { it.mealId == "guaranteed-vegan" }.guaranteed)
         assertTrue(plan.constraintConflicts.isEmpty())
-        assertEquals(listOf("vegan"), plan.event.selectedConstraints.map { it.id })
+        assertTrue(dietaryServings(plan.selectedMeals, meals, "vegan") >= 5)
     }
 
     @Test

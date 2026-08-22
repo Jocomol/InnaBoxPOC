@@ -89,8 +89,7 @@ data class SelectedMeal(
 )
 
 @Schema(
-    description = "Compatibility shape for historical per-meal dietary conflicts. Current planning reports aggregate dietary shortfalls as warnings or a 422 response, so this list is normally empty.",
-    deprecated = true,
+    description = "Non-fatal dietary compatibility note for an explicitly guaranteed meal. The meal remains selected, while other dishes must provide the requested dietary serving coverage.",
 )
 data class ConstraintConflict(
     @field:Schema(example = "mini-spinach-quiche")
@@ -188,8 +187,7 @@ data class ShoppingPlan(
     val event: EventSummary,
     val selectedMeals: List<SelectedMeal>,
     @field:Schema(
-        description = "Deprecated per-meal conflict list retained for response compatibility. Aggregate dietary shortfalls are exposed through `warnings` or HTTP 422.",
-        deprecated = true,
+        description = "Non-fatal dietary compatibility notes for explicitly guaranteed meals. These do not remove a pinned dish; aggregate serving coverage is still enforced across the complete menu.",
     )
     val constraintConflicts: List<ConstraintConflict>,
     val fulfilledRequirements: List<FulfilledRequirement>,

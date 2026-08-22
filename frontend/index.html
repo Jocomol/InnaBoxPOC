@@ -1,298 +1,269 @@
-<!doctype html>
+<!DOCTYPE html>
+
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="description" content="Deterministic catering and shopping plan generator">
-  <title>Tableplan — Catering planner</title>
-  <link rel="stylesheet" href="styles.css?v=pin-reject-actions-1">
-  <script src="app.js?v=pin-reject-actions-1" defer></script>
-</head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1, viewport-fit=cover" name="viewport"/>
+<meta content="Event in a Box — deterministic catering and shopping plan generator" name="description"/>
+<title>Event in a Box — Catering planner</title>
+<link href="styles.css?v=event-in-a-box-1" rel="stylesheet"/>
+<script defer="True" src="i18n.js?v=event-in-a-box-1"></script><script defer="True" src="app.js?v=event-in-a-box-1"></script></head>
 <body>
-  <header class="site-header">
-    <a class="brand" href="#planner-form">TABLE<span>PLAN</span></a>
-    <nav class="site-nav" aria-label="Primary navigation">
-      <a href="#planner-form">Planner</a>
-      <a href="#developer-tools">Tools</a>
-    </nav>
-  </header>
-
-  <main>
-    <section class="hero">
-      <p class="eyebrow">From headcount to checkout</p>
-      <h1>Plan the event.<br><em>We calculate the rest.</em></h1>
-      <p class="hero-copy">Set the occasion, dietary guest counts, specific dishes and stock on hand. Tableplan returns a deterministic menu and package-level shopping list.</p>
-    </section>
-
-    <form id="planner-form" class="planner" novalidate>
-      <section class="panel" aria-labelledby="event-heading">
-        <div class="section-heading">
-          <span>01</span>
-          <div>
-            <h2 id="event-heading">Event basics</h2>
-            <p id="template-description">Loading event templates…</p>
-          </div>
-        </div>
-
-        <div class="field-grid event-grid">
-          <label class="field wide">
-            <span>Event format</span>
-            <select id="template" required disabled>
-              <option>Loading…</option>
-            </select>
-          </label>
-          <label class="field">
-            <span>Guests</span>
-            <input id="guest-count" type="number" min="1" max="10000" value="40" inputmode="numeric" required>
-          </label>
-          <label class="field money-field">
-            <span>Budget</span>
-            <i>CHF</i>
-            <input id="budget" type="number" min="0" step="10" value="800" inputmode="decimal" required>
-          </label>
-        </div>
-      </section>
-
-      <section class="panel constraint-panel" aria-labelledby="constraints-heading">
-        <div class="section-heading action-heading">
-          <span>02</span>
-          <div>
-            <h2 id="constraints-heading">Dietary guest counts</h2>
-            <p>Enter how many guests need compatible servings. One dish may cover more than one dietary need.</p>
-          </div>
-          <button id="clear-constraints" class="tertiary-button" type="button" hidden>Clear selected</button>
-        </div>
-        <div id="dietary-constraints" class="constraint-grid" aria-live="polite">
-          <p class="empty-row">Loading dietary constraints…</p>
-        </div>
-        <p class="constraint-note">These counts set minimum serving coverage; they do not require every dish in the menu to match.</p>
-      </section>
-
-      <section class="panel" aria-labelledby="guaranteed-heading">
-        <div class="section-heading action-heading">
-          <span>03</span>
-          <div>
-            <h2 id="guaranteed-heading">Specific dishes</h2>
-            <p>Optional. Add recipes that must appear in the final menu.</p>
-          </div>
-          <div class="heading-actions">
-            <button id="clear-required-meals" class="tertiary-button" type="button" hidden>Clear selected</button>
-            <button id="open-meal-picker" class="secondary-button" type="button">+ Choose dishes</button>
-          </div>
-        </div>
-        <div id="required-meals" class="selected-meals-list" aria-live="polite">
-          <p class="empty-selection">No specific dishes selected.</p>
-        </div>
-      </section>
-
-      <section class="panel" aria-labelledby="inventory-heading">
-        <div class="section-heading action-heading">
-          <span>04</span>
-          <div>
-            <h2 id="inventory-heading">Already in stock</h2>
-            <p>Optional. Choose ingredients already on hand; stock is deducted before package quantities are rounded up.</p>
-          </div>
-          <button id="add-inventory" class="secondary-button" type="button">+ Add stock</button>
-        </div>
-        <div id="inventory-rows" class="inventory-rows"></div>
-      </section>
-
-      <details class="advanced-panel panel">
-        <summary>
-          <span class="advanced-title">Planning preferences</span>
-          <span class="advanced-copy">Optional fine-tuning</span>
-        </summary>
-        <div class="advanced-content">
-          <label class="field compact">
-            <span>Food servings / guest</span>
-            <input id="servings-per-guest" type="number" min="1" max="10" step="1" inputmode="numeric" placeholder="Use template">
-            <small class="field-hint">Optional · maximum 10</small>
-          </label>
-
-          <label class="field compact">
-            <span>Distinct meals offered</span>
-            <input id="meal-count-input" type="number" min="1" step="1" inputmode="numeric" placeholder="Use template">
-            <small class="field-hint">Changing this does not change total servings</small>
-          </label>
-
-          <label class="check-field">
-            <input id="prepare-ahead" type="checkbox">
-            <span><strong>Prefer prepare-ahead</strong><small>Used as a deterministic tie-breaker</small></span>
-          </label>
-
-          <div class="priority-block">
-            <div class="subheading">
-              <h3>Selection priorities</h3>
-              <p>Weights are normalized automatically.</p>
-            </div>
-            <div id="weights" class="weights"></div>
-          </div>
-        </div>
-      </details>
-
-      <div id="form-error" class="error-message" role="alert" hidden></div>
-      <button id="generate" class="generate-button" type="submit">
-        <span>Generate catering plan</span><b aria-hidden="true">→</b>
-      </button>
-    </form>
-
-    <section id="results" class="results" aria-live="polite" hidden>
-      <div class="result-intro">
-        <div>
-          <p class="eyebrow">Resolved plan</p>
-          <h2 id="result-title">Your event, accounted for.</h2>
-        </div>
-        <button id="back-to-form" class="secondary-button" type="button">Edit inputs</button>
-      </div>
-
-      <div id="constraint-warning-summary" class="constraint-warning-summary" hidden></div>
-      <div id="warnings" class="warnings" hidden></div>
-      <div id="totals" class="totals"></div>
-
-      <section class="result-section">
-        <div class="result-section-heading menu-result-heading">
-          <div>
-            <h3>Selected menu</h3>
-            <p>Pin dishes to keep them, or remove dishes from the next generation.</p>
-          </div>
-          <button id="regenerate-menu" class="primary-small-button" type="button">Regenerate menu</button>
-        </div>
-        <div id="menu-change-status" class="menu-change-status" role="status" aria-live="polite" hidden></div>
-        <div id="excluded-meals" class="excluded-meals" hidden></div>
-        <div id="selected-meals" class="meal-grid"></div>
-      </section>
-
-      <section class="result-section">
-        <div class="result-section-heading">
-          <h3>Shopping list</h3>
-          <p>Required amounts are netted against stock before package rounding.</p>
-        </div>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr><th>Item</th><th>Need</th><th>Stock used</th><th>Packages</th><th>Purchased</th><th>Overbuy</th><th>Total</th></tr>
-            </thead>
-            <tbody id="shopping-items"></tbody>
-          </table>
-        </div>
-      </section>
-
-      <section class="result-section inventory-result">
-        <div>
-          <div class="result-section-heading"><h3>Existing stock used</h3></div>
-          <div id="inventory-used" class="stock-list"></div>
-        </div>
-        <details class="trace-details">
-          <summary>Planning details</summary>
-          <div id="requirement-trace" class="requirement-trace"></div>
-        </details>
-      </section>
-    </section>
-
-    <details id="developer-tools" class="developer-tools">
-      <summary>
-        <span>Developer tools & catalog</span>
-        <small>Recipes, products, scores and raw catalog details</small>
-      </summary>
-      <section id="catalog-browser" class="catalog-browser" aria-labelledby="catalog-heading">
-        <div class="catalog-intro">
-          <div>
-            <p class="eyebrow">MongoDB catalog</p>
-            <h2 id="catalog-heading">Browse what the planner knows.</h2>
-            <p>This area is intentionally secondary to the event-planning workflow.</p>
-          </div>
-          <p id="catalog-count" class="catalog-count" aria-live="polite">Open tools to load catalog.</p>
-        </div>
-
-        <div class="catalog-toolbar">
-          <div class="catalog-tabs" role="tablist" aria-label="Catalog type">
-            <button class="catalog-tab active" type="button" role="tab" aria-selected="true" data-catalog-type="meals">Recipes <span id="meal-count">0</span></button>
-            <button class="catalog-tab" type="button" role="tab" aria-selected="false" data-catalog-type="products">Items <span id="product-count">0</span></button>
-          </div>
-          <label class="catalog-search">
-            <span class="visually-hidden">Search catalog</span>
-            <input id="catalog-search" type="search" placeholder="Search name, ID, ingredient…" autocomplete="off">
-          </label>
-          <label class="catalog-filter">
-            <span class="visually-hidden">Filter by capability</span>
-            <select id="catalog-capability" aria-label="Filter by capability">
-              <option value="">All capabilities</option>
-            </select>
-          </label>
-        </div>
-        <div id="catalog-results" class="catalog-grid"></div>
-      </section>
-    </details>
-  </main>
-
-  <dialog id="meal-picker" class="meal-picker">
-    <div class="picker-shell">
-      <div class="picker-header">
-        <div>
-          <p class="eyebrow">Specific dishes</p>
-          <h2>Choose guaranteed meals</h2>
-          <p>Search directly or browse by category. Guaranteed dishes still pass normal event and hard-constraint checks.</p>
-        </div>
-        <button id="close-meal-picker" class="icon-button" type="button" aria-label="Close meal picker">×</button>
-      </div>
-
-      <div class="picker-search-wrap">
-        <label class="field">
-          <span>Search recipes</span>
-          <input id="meal-picker-search" type="search" placeholder="Try “croissant”, “fruit”, “falafel”…" autocomplete="off">
-        </label>
-      </div>
-
-      <div class="picker-filter-area">
-        <div>
-          <span class="picker-filter-label">Browse categories</span>
-          <div id="meal-picker-categories" class="picker-categories" aria-label="Meal categories"></div>
-        </div>
-        <label class="field picker-capability-field">
-          <span>Food type</span>
-          <select id="meal-picker-capability">
-            <option value="">All food types</option>
-          </select>
-        </label>
-      </div>
-      <div class="picker-status-row">
-        <p id="meal-picker-status">Loading recipes…</p>
-        <span id="meal-picker-selected-count">0 selected</span>
-      </div>
-      <div id="meal-picker-results" class="picker-results"></div>
-      <div class="picker-footer">
-        <button id="meal-picker-clear-selected" class="tertiary-button" type="button" hidden>Clear selected</button>
-        <button id="meal-picker-done" class="primary-small-button" type="button">Done</button>
-      </div>
-    </div>
-  </dialog>
-
-
-  <dialog id="inventory-picker" class="meal-picker inventory-picker">
-    <div class="picker-shell">
-      <div class="picker-header">
-        <div>
-          <p class="eyebrow">Existing stock</p>
-          <h2>Choose an ingredient</h2>
-          <p>Select from the actual catalog instead of typing an internal product concept.</p>
-        </div>
-        <button id="close-inventory-picker" class="icon-button" type="button" aria-label="Close ingredient picker">×</button>
-      </div>
-
-      <div class="picker-search-wrap">
-        <label class="field">
-          <span>Search ingredients</span>
-          <input id="inventory-picker-search" type="search" placeholder="Try “mozzarella”, “water”, “apple”…" autocomplete="off">
-        </label>
-      </div>
-
-      <div class="picker-status-row">
-        <p id="inventory-picker-status">Loading ingredients…</p>
-      </div>
-      <div id="inventory-picker-results" class="picker-results inventory-picker-results"></div>
-    </div>
-  </dialog>
-
-  <footer><span>TABLEPLAN POC</span><span>Explainable by design · CHF pricing</span></footer>
+<header class="site-header">
+<a class="brand" href="#planner-form">EVENT <span>IN A BOX</span></a>
+<div class="header-actions"><nav aria-label="Primary navigation" class="site-nav" data-i18n-aria-label="nav.primary">
+<a data-i18n="nav.planner" href="#planner-form">Planner</a>
+<a data-i18n="nav.tools" href="#developer-tools">Tools</a>
+</nav><label class="language-picker"><span class="visually-hidden" data-i18n="language.label">Language</span><select aria-label="Language" data-i18n-aria-label="language.label" id="language-select"><option value="en">EN</option><option value="de">DE</option><option value="fr">FR</option><option value="it">IT</option></select></label></div></header>
+<main>
+<section class="hero">
+<p class="eyebrow" data-i18n="hero.eyebrow">From headcount to checkout</p>
+<h1><span data-i18n="hero.title.1">Plan the event.</span><br/><em data-i18n="hero.title.2">We calculate the rest.</em></h1>
+<p class="hero-copy" data-i18n="hero.copy">Set the occasion, dietary guest counts, specific dishes and stock on hand. Event in a Box returns a deterministic menu and package-level shopping list.</p>
+</section>
+<form class="planner" id="planner-form" novalidate="">
+<section aria-labelledby="event-heading" class="panel">
+<div class="section-heading">
+<span>01</span>
+<div>
+<h2 data-i18n="event.title" id="event-heading">Event basics</h2>
+<p data-i18n="event.loading" id="template-description">Loading event templates…</p>
+</div>
+</div>
+<input id="template" type="hidden" value=""/>
+<div aria-label="Event format" aria-live="polite" class="event-type-grid" id="event-types" role="radiogroup">
+<p class="empty-row" data-i18n="event.loading">Loading event formats…</p>
+</div>
+<div class="event-input-grid">
+<label class="field">
+<span data-i18n="event.guests">Guests</span>
+<input id="guest-count" inputmode="numeric" max="10000" min="1" required="" type="number" value="40"/>
+</label>
+<label class="field money-field">
+<span data-i18n="event.budget">Budget</span>
+<i>CHF</i>
+<input id="budget" inputmode="decimal" min="0" required="" step="10" type="number" value="800"/>
+</label>
+</div>
+</section>
+<section aria-labelledby="constraints-heading" class="panel constraint-panel">
+<div class="section-heading action-heading">
+<span>02</span>
+<div>
+<h2 data-i18n="constraints.title" id="constraints-heading">Dietary guest counts</h2>
+<p data-i18n="constraints.copy">Enter how many guests need compatible servings. One dish may cover more than one dietary need.</p>
+</div>
+<button class="tertiary-button" data-i18n="constraints.clear" hidden="" id="clear-constraints" type="button">Clear selected</button>
+</div>
+<div aria-live="polite" class="constraint-grid" id="dietary-constraints">
+<p class="empty-row">Loading dietary constraints…</p>
+</div>
+<p class="constraint-note" data-i18n="constraints.note">These counts set minimum serving coverage; they do not require every dish in the menu to match.</p>
+</section>
+<section aria-labelledby="guaranteed-heading" class="panel">
+<div class="section-heading action-heading">
+<span>03</span>
+<div>
+<h2 data-i18n="dishes.title" id="guaranteed-heading">Specific dishes</h2>
+<p data-i18n="dishes.copy">Optional. Add recipes that must appear in the final menu.</p>
+</div>
+<div class="heading-actions">
+<button class="tertiary-button" data-i18n="constraints.clear" hidden="" id="clear-required-meals" type="button">Clear selected</button>
+<button class="secondary-button" data-i18n="dishes.choose" id="open-meal-picker" type="button">+ Choose dishes</button>
+</div>
+</div>
+<div aria-live="polite" class="selected-meals-list" id="required-meals">
+<p class="empty-selection" data-i18n="dishes.noneSelected">No specific dishes selected.</p>
+</div>
+</section>
+<section aria-labelledby="inventory-heading" class="panel">
+<div class="section-heading action-heading">
+<span>04</span>
+<div>
+<h2 data-i18n="stock.title" id="inventory-heading">Already in stock</h2>
+<p data-i18n="stock.copy">Optional. Choose ingredients already on hand; stock is deducted before package quantities are rounded up.</p>
+</div>
+<button class="secondary-button" data-i18n="stock.add" id="add-inventory" type="button">+ Add stock</button>
+</div>
+<div class="inventory-rows" id="inventory-rows"></div>
+</section>
+<details class="advanced-panel panel">
+<summary>
+<span class="advanced-title" data-i18n="preferences.title">Planning preferences</span>
+<span class="advanced-copy" data-i18n="preferences.copy">Optional fine-tuning</span>
+</summary>
+<div class="advanced-content">
+<label class="field compact">
+<span data-i18n="preferences.servings">Food servings / guest</span>
+<input data-i18n-placeholder="preferences.useTemplate" id="servings-per-guest" inputmode="numeric" max="10" min="1" placeholder="Use template" step="1" type="number"/>
+<small class="field-hint" data-i18n="preferences.max10">Optional · maximum 10</small>
+</label>
+<label class="field compact">
+<span data-i18n="preferences.mealCount">Distinct meals offered</span>
+<input data-i18n-placeholder="preferences.useTemplate" id="meal-count-input" inputmode="numeric" min="1" placeholder="Use template" step="1" type="number"/>
+<small class="field-hint" data-i18n="preferences.mealCountHint">Changing this does not change total servings</small>
+</label>
+<label class="check-field">
+<input id="prepare-ahead" type="checkbox"/>
+<span><strong data-i18n="preferences.prepareAhead">Prefer prepare-ahead</strong><small data-i18n="preferences.prepareAheadHint">Used as a deterministic tie-breaker</small></span>
+</label>
+<div class="priority-block">
+<div class="subheading">
+<h3 data-i18n="preferences.priorities">Selection priorities</h3>
+<p data-i18n="preferences.prioritiesHint">Weights are normalized automatically.</p>
+</div>
+<div class="weights" id="weights"></div>
+</div>
+</div>
+</details>
+<div class="error-message" hidden="" id="form-error" role="alert"></div>
+<button class="generate-button" id="generate" type="submit">
+<span data-i18n="plan.generate">Generate catering plan</span><b aria-hidden="true">→</b>
+</button>
+</form>
+<section aria-live="polite" class="results" hidden="" id="results">
+<div class="result-intro">
+<div>
+<p class="eyebrow" data-i18n="plan.resolved">Resolved plan</p>
+<h2 data-i18n="plan.defaultTitle" id="result-title">Your event, accounted for.</h2>
+</div>
+<button class="secondary-button" data-i18n="plan.edit" id="back-to-form" type="button">Edit inputs</button>
+</div>
+<div class="constraint-warning-summary" hidden="" id="constraint-warning-summary"></div>
+<div class="warnings" hidden="" id="warnings"></div>
+<div class="totals" id="totals"></div>
+<section class="result-section">
+<div class="result-section-heading menu-result-heading">
+<div>
+<h3 data-i18n="results.selectedMenu">Selected menu</h3>
+<p data-i18n="results.selectedMenuCopy">Pin dishes to keep them, or remove dishes from the next generation.</p>
+</div>
+<button class="primary-small-button" data-i18n="results.regenerate" id="regenerate-menu" type="button">Regenerate menu</button>
+</div>
+<div aria-live="polite" class="menu-change-status" hidden="" id="menu-change-status" role="status"></div>
+<div class="excluded-meals" hidden="" id="excluded-meals"></div>
+<div class="meal-grid" id="selected-meals"></div>
+</section>
+<section class="result-section">
+<div class="result-section-heading">
+<h3 data-i18n="results.shoppingList">Shopping list</h3>
+<p data-i18n="results.shoppingCopy">Required amounts are netted against stock before package rounding.</p>
+</div>
+<div class="table-wrap">
+<table>
+<thead>
+<tr><th data-i18n="table.item">Item</th><th data-i18n="table.need">Need</th><th data-i18n="table.stockUsed">Stock used</th><th data-i18n="table.packages">Packages</th><th data-i18n="table.purchased">Purchased</th><th data-i18n="table.overbuy">Overbuy</th><th data-i18n="table.total">Total</th></tr>
+</thead>
+<tbody id="shopping-items"></tbody>
+</table>
+</div>
+</section>
+<section class="result-section inventory-result">
+<div>
+<div class="result-section-heading"><h3 data-i18n="results.stockUsed">Existing stock used</h3></div>
+<div class="stock-list" id="inventory-used"></div>
+</div>
+<details class="trace-details">
+<summary data-i18n="results.planningDetails">Planning details</summary>
+<div class="requirement-trace" id="requirement-trace"></div>
+</details>
+</section>
+</section>
+<details class="developer-tools" id="developer-tools">
+<summary>
+<span data-i18n="developer.title">Developer tools &amp; catalog</span>
+<small data-i18n="developer.copy">Recipes, products, scores and raw catalog details</small>
+</summary>
+<section aria-labelledby="catalog-heading" class="catalog-browser" id="catalog-browser">
+<div class="catalog-intro">
+<div>
+<p class="eyebrow" data-i18n="catalog.eyebrow">MongoDB catalog</p>
+<h2 data-i18n="catalog.title" id="catalog-heading">Browse what the planner knows.</h2>
+<p data-i18n="catalog.copy">This area is intentionally secondary to the event-planning workflow.</p>
+</div>
+<p aria-live="polite" class="catalog-count" data-i18n="catalog.openToLoad" id="catalog-count">Open tools to load catalog.</p>
+</div>
+<div class="catalog-toolbar">
+<div aria-label="Catalog type" class="catalog-tabs" role="tablist">
+<button aria-selected="true" class="catalog-tab active" data-catalog-type="meals" role="tab" type="button"><span class="catalog-tab-label" data-i18n="catalog.recipes">Recipes</span> <span id="meal-count">0</span></button>
+<button aria-selected="false" class="catalog-tab" data-catalog-type="products" role="tab" type="button"><span class="catalog-tab-label" data-i18n="catalog.items">Items</span> <span id="product-count">0</span></button>
+</div>
+<label class="catalog-search">
+<span class="visually-hidden">Search catalog</span>
+<input autocomplete="off" data-i18n-placeholder="catalog.searchMeals" id="catalog-search" placeholder="Search name, ID, ingredient…" type="search"/>
+</label>
+<label class="catalog-filter">
+<span class="visually-hidden">Filter by capability</span>
+<select aria-label="Filter by capability" data-i18n-aria-label="catalog.filter" id="catalog-capability">
+<option data-i18n="catalog.allCapabilities" value="">All capabilities</option>
+</select>
+</label>
+</div>
+<div class="catalog-grid" id="catalog-results"></div>
+</section>
+</details>
+</main>
+<dialog class="meal-picker" id="meal-picker">
+<div class="picker-shell">
+<div class="picker-header">
+<div>
+<p class="eyebrow" data-i18n="picker.dishes.eyebrow">Specific dishes</p>
+<h2 data-i18n="picker.dishes.title">Choose guaranteed meals</h2>
+<p data-i18n="picker.dishes.copy">Search directly or browse by category. Guaranteed dishes still pass normal event and hard-constraint checks.</p>
+</div>
+<button aria-label="Close meal picker" class="icon-button" data-i18n-aria-label="picker.dishes.close" id="close-meal-picker" type="button">×</button>
+</div>
+<div class="picker-search-wrap">
+<label class="field">
+<span data-i18n="picker.dishes.searchLabel">Search recipes</span>
+<input autocomplete="off" data-i18n-placeholder="picker.dishes.searchPlaceholder" id="meal-picker-search" placeholder="Try “croissant”, “fruit”, “falafel”…" type="search"/><small class="localized-search-hint" data-i18n="search.localizedHint">Searches both the selected language and the English catalog.</small>
+</label>
+</div>
+<div class="picker-filter-area">
+<div>
+<span class="picker-filter-label" data-i18n="picker.dishes.categories">Browse categories</span>
+<div aria-label="Meal categories" class="picker-categories" data-i18n-aria-label="picker.dishes.categories" id="meal-picker-categories"></div>
+</div>
+<label class="field picker-capability-field">
+<span data-i18n="picker.dishes.foodType">Food type</span>
+<select id="meal-picker-capability">
+<option data-i18n="picker.dishes.allFoodTypes" value="">All food types</option>
+</select>
+</label>
+</div>
+<div class="picker-status-row">
+<p data-i18n="picker.dishes.loading" id="meal-picker-status">Loading recipes…</p>
+<span id="meal-picker-selected-count">0 selected</span>
+</div>
+<div class="picker-results" id="meal-picker-results"></div>
+<div class="picker-footer">
+<button class="tertiary-button" data-i18n="constraints.clear" hidden="" id="meal-picker-clear-selected" type="button">Clear selected</button>
+<button class="primary-small-button" data-i18n="common.done" id="meal-picker-done" type="button">Done</button>
+</div>
+</div>
+</dialog>
+<dialog class="meal-picker inventory-picker" id="inventory-picker">
+<div class="picker-shell">
+<div class="picker-header">
+<div>
+<p class="eyebrow" data-i18n="picker.stock.eyebrow">Existing stock</p>
+<h2 data-i18n="picker.stock.title">Choose an ingredient</h2>
+<p data-i18n="picker.stock.copy">Select from the actual catalog instead of typing an internal product concept.</p>
+</div>
+<button aria-label="Close ingredient picker" class="icon-button" data-i18n-aria-label="picker.stock.close" id="close-inventory-picker" type="button">×</button>
+</div>
+<div class="picker-search-wrap">
+<label class="field">
+<span data-i18n="picker.stock.searchLabel">Search ingredients</span>
+<input autocomplete="off" data-i18n-placeholder="picker.stock.searchPlaceholder" id="inventory-picker-search" placeholder="Try “mozzarella”, “water”, “apple”…" type="search"/><small class="localized-search-hint" data-i18n="search.localizedHint">Searches both the selected language and the English catalog.</small>
+</label>
+</div>
+<div class="picker-status-row">
+<p data-i18n="picker.stock.loading" id="inventory-picker-status">Loading ingredients…</p>
+</div>
+<div class="picker-results inventory-picker-results" id="inventory-picker-results"></div>
+</div>
+</dialog>
+<footer><span data-i18n="footer.poc">EVENT IN A BOX POC</span><span data-i18n="footer.copy">Explainable by design · CHF pricing</span></footer>
 </body>
 </html>

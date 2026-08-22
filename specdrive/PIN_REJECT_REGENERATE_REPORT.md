@@ -7,14 +7,17 @@
 - `backend/src/main/kotlin/ch/inabox/catering/service/PlannerEngine.kt` — added normalization, validation, catalog checks, and common pre-selector filtering.
 - `backend/src/main/kotlin/ch/inabox/catering/controller/PlanningController.kt` — documented pin/reject behavior, request examples, and 400/422 errors in Swagger.
 - `backend/src/test/kotlin/ch/inabox/catering/service/PlannerEngineTest.kt` — added focused legacy, enhanced, meal-count, dietary, and validation tests.
-- `frontend/app.js` — added session state and synchronized Pin, Unpin, Remove, Undo, template-reset, and Regenerate behavior; each selected card now renders its action toolbar immediately below the card heading.
-- `frontend/index.html` — added result-area feedback, rejected-meal visibility, the Regenerate action, and versioned frontend asset URLs so an older cached script cannot hide newly deployed controls.
-- `frontend/styles.css` — added prominent pinned/rejected states and a two-button, 44 px-high action toolbar that remains visible on desktop and mobile.
-- `scripts/test-frontend-pin-reject.mjs` — added a retained, dependency-free Chromium smoke test for action visibility, state changes, request payloads, regeneration, and responsive geometry.
-- `scripts/test-planner-pipeline.sh` — added live API checks for pin/reject regeneration, overlap validation, unknown exclusions, and the insufficient-candidate warning fallback.
+- `frontend/app.js` — added session state and synchronized Pin, Unpin, Remove, Undo, template-reset, and Regenerate behavior; each selected card now renders its action toolbar immediately below the card heading, and priority sliders synchronize their visible progress fill and percentage output.
+- `frontend/index.html` — added result-area feedback, rejected-meal visibility, the Regenerate action, and versioned frontend asset URLs so older cached JavaScript or CSS cannot hide frontend fixes.
+- `frontend/styles.css` — added prominent pinned/rejected states and a two-button, 44 px-high action toolbar that remains visible on desktop and mobile; corrected wrapped heading-action widths and made priority sliders touch-friendly.
+- `mongo/seed.js` — expanded the Business Apéro replacement pool with six new meals, six matching products, and four compatible existing reception meals.
+- `mongo/check-seed.js` — validates the expanded 33-meal/36-product catalog, at least 15 Business Apéro candidates, and at least five vegan alternatives.
+- `scripts/test-frontend-pin-reject.mjs` — added a retained, dependency-free Chromium smoke test for action visibility, state changes, request payloads, a visibly rendered replacement after regeneration, responsive geometry, document overflow, panel containment, and real touch-slider interaction.
+- `scripts/test-planner-pipeline.sh` — added live API checks for one and three simultaneous removals, real replacements, overlap validation, and unknown exclusions.
+- `specdrive/pipeline/pipeline_weighting_test_scenarios.json` — updated catalog-dependent expected winners for the expanded Business Apéro pool.
 - `specdrive/PIN_REJECT_REGENERATE_REPORT.md` — this report.
 
-No Mongo seed, database schema, catalog document, scoring formula, dietary-allocation rule, inventory rule, or product-selection behavior was changed.
+No database schema, scoring formula, dietary-allocation rule, inventory rule, or product-selection behavior was changed. The development seed catalog was deliberately expanded and the running development Mongo database was reseeded.
 
 ## B. API
 
@@ -46,6 +49,30 @@ The initial implementation did create Pin and Remove elements, but placed the ac
 
 `renderMeals()` now puts a labeled, two-column action toolbar directly below every meal heading. Both controls fill their column and have a 44 px minimum height. Pin/Unpin still derives exclusively from `state.requiredMeals`; Remove still adds to `state.excludedMealIds`. The Regenerate button and form-submit path are unchanged. The stylesheet and script URLs carry a version query so this frontend revision is fetched after deployment.
 
+### Mobile horizontal-overflow follow-up
+
+A 405 px-wide phone screenshot exposed an overflow outside the selected-menu cards: direct section-heading actions such as **Add stock** received `width: 100%` plus a 46–50 px left margin while retaining a non-shrinking flex basis. The button therefore extended past its panel and could expand the mobile document. The earlier smoke test compared document width with Chrome's already-expanded layout viewport, so it incorrectly accepted the overflow.
+
+The mobile rules now reserve the numbered-heading offset inside the available width with `calc(100% - 46px)` or `calc(100% - 50px)`. The same correction covers direct secondary/tertiary controls and grouped heading actions. The asset query was incremented to `pin-reject-actions-2` so browsers fetch the corrected CSS.
+
+The retained Chromium smoke accepts `PHONE_WIDTH` and `PHONE_HEIGHT`, compares `document.scrollWidth` with the emulated physical screen width, verifies all visible heading buttons remain within their panel, and checks that action labels are not clipped.
+
+### Mobile priority-slider follow-up
+
+The priority sliders originally retained the browser's small native thumb inside a 20 px-high input. On mobile, generic panel padding also overrode the advanced panel's zero-padding layout, creating a double horizontal inset and reducing the slider itself to 176 px on a 320 px screen.
+
+Range inputs now expose a 44 px touch area, a 26 px high-contrast thumb, an 8 px track, visible green progress, touch-safe vertical scrolling, and a focus-visible ring. Mobile priority labels and endpoint text are slightly larger. Restoring `padding: 0` on the mobile advanced panel removes the accidental double inset, producing a 212 px slider at 320 px and a 297 px slider at 405 px. Native range semantics and keyboard behavior remain intact.
+
+The browser smoke opens the advanced panel, centers the first slider, dispatches an actual Chromium touch-start/move/end sequence, and verifies the value, percentage output, and progress styling all change together. An optional `SLIDER_SCREENSHOT_PATH` captures the rendered control for visual inspection. The asset revision is `pin-reject-actions-3` so deployed phones fetch both the JavaScript and CSS changes.
+
+### Catalog-alternatives follow-up
+
+The original seed had only five meals satisfying Business Apéro's `savory`, `finger-food`, and `apero` requirements. Removing even one from a requested five-meal plan therefore exercised only the planner's insufficient-candidate fallback, not a visible replacement.
+
+The seed now contains 33 meals and 36 products, up from 27 and 30. Four existing reception recipes were made Business Apéro-compatible, and six new alternatives were added: Swiss Mini Rösti Bites, Herbed Polenta Bites, Swiss Beef Meatballs, Gruyère & Grape Skewers, Hummus-Stuffed Mini Peppers, and Swiss Vegetable Antipasti Skewers. Their ingredient concepts all have matching products, and the compatible Business Apéro pool is now 15 meals, including at least five vegan choices.
+
+The running development Mongo database was reseeded. The live pipeline smoke now pins one original meal, excludes three others at once, requires all three exclusions to remain absent, and verifies that the regenerated five-meal result contains at least three genuinely new meal IDs.
+
 ## E. Tests
 
 Commands and results actually run:
@@ -57,10 +84,16 @@ Commands and results actually run:
 - `docker build -q .` from `frontend/` — passed.
 - `docker build -t innaboxpoc-frontend-pin-reject-test .` from `frontend/` — passed.
 - `docker build -t innaboxpoc-backend-pin-reject-test .` from `backend/` — passed; the image build also ran all 27 Maven tests successfully.
-- `API_BASE_URL=http://localhost:8081 ./scripts/test-planner-pipeline.sh` — the first run exposed an over-strict smoke assertion that always expected five seeded apéro dishes after an exclusion. The seed has only five compatible candidates, so the valid planner result is four plus the existing insufficient-candidate warning. The assertion was corrected to accept a replacement when available or the documented warning fallback; the rerun passed all pipeline, pin/reject, overlap, unknown-ID, dietary, and compatibility checks.
-- `API_BASE_URL=http://localhost:8081 ./scripts/test-pipeline-weighting.sh` — passed all eight weighting scenarios.
+- `./scripts/reseed.sh` — passed; the running development Mongo database was updated to 6 templates, 33 meals, 36 products, 5 priorities, 6 dietary constraints, and 7 categories.
+- `docker compose exec -T mongodb mongosh catering < mongo/check-seed.js` — passed counts, references, dietary capabilities, Swiss-score consistency, ingredient coverage, and Business Apéro alternative coverage.
+- `./scripts/test-planner-pipeline.sh` — passed all pipeline checks, including exact five-meal regeneration after one exclusion and three genuinely new replacements after three simultaneous exclusions while retaining a pin.
+- `./scripts/test-pipeline-weighting.sh` — passed all eight weighting scenarios after updating catalog-dependent expected winners.
 - `curl ... http://localhost:8081/v3/api-docs | jq -e ...` — passed; the generated OpenAPI document contains `excludedMealIds` on both request and event-response schemas and describes it on the resolve operation.
 - `SCREENSHOT_PATH=/tmp/pin-reject-browser.png node scripts/test-frontend-pin-reject.mjs` — passed in real headless Chromium against the actual `frontend/index.html`, `app.js`, and `styles.css`. It verified that all five selected desktop cards render visible Pin and Remove controls before their detail content; clicked Pin and Remove; directly checked `state.requiredMeals` and `state.excludedMealIds`; verified the regenerated request carries both IDs and the regenerated menu keeps/excludes them; checked Unpin; then repeated visibility/geometry checks at 390 × 844 px. Action buttons measured 44 px high and Regenerate measured 354 × 46 px. The captured browser card visibly showed **Unpin** and **Remove** in the two-column toolbar.
+- `UI_BASE_URL=http://localhost:3000/ SCREENSHOT_PATH=/tmp/pin-remove-expanded-catalog.png node scripts/test-frontend-pin-reject.mjs` — passed against the actual running frontend, backend, and expanded Mongo catalog. It pinned Swiss Vegetable Antipasti Skewers, removed Swiss Mini Rösti Bites, regenerated exactly five visible cards, and rendered Swiss Beef Meatballs as a genuine replacement while retaining the pin and exclusion. The same run passed at 390 × 844 px with no horizontal overflow and 44 px action targets.
+- `PHONE_WIDTH=320 PHONE_HEIGHT=568 node scripts/test-frontend-pin-reject.mjs` — passed with `documentWidth=320`; actions measured at least 105 × 44 px, Regenerate measured 284 × 46 px, and a real touch drag changed the 212 × 44 px slider from 100% to 20%.
+- `PHONE_WIDTH=405 PHONE_HEIGHT=716 FORM_SCREENSHOT_PATH=/tmp/pin-reject-overflow-fixed-form-405.png SLIDER_SCREENSHOT_PATH=/tmp/mobile-slider-405.png node scripts/test-frontend-pin-reject.mjs` — passed at the exact width of the reported screenshot with `documentWidth=405`; the captured form showed heading actions contained by their panels, and the captured 297 × 44 px slider visibly changed from 100% to 25% through touch input.
+- `PHONE_WIDTH=768 PHONE_HEIGHT=1024 node scripts/test-frontend-pin-reject.mjs` — passed the 641–800 px responsive branch with `documentWidth=768`.
 - `git diff --check` — passed both before and after report creation.
 
 The prior report referred only to a deleted temporary browser harness, so that result could not be rerun and did not protect the card renderer from regression. The new browser smoke is retained in `scripts/`, uses a local read-only fixture server by default, and does not start, reseed, or write MongoDB. Set `UI_BASE_URL` to exercise an already running deployment instead.

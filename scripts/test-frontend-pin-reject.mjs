@@ -11,8 +11,15 @@ import { fileURLToPath } from "node:url";
 const chromiumBinary = process.env.CHROMIUM_BIN || "chromium";
 const frontendRoot = fileURLToPath(new URL("../frontend/", import.meta.url));
 const screenshotPath = process.env.SCREENSHOT_PATH;
+const formScreenshotPath = process.env.FORM_SCREENSHOT_PATH;
+const sliderScreenshotPath = process.env.SLIDER_SCREENSHOT_PATH;
+const phoneWidth = Number(process.env.PHONE_WIDTH || 390);
+const phoneHeight = Number(process.env.PHONE_HEIGHT || 844);
 const resolveRequests = [];
 const fixtureRequestLog = [];
+
+assert.ok(Number.isInteger(phoneWidth) && phoneWidth >= 280, "PHONE_WIDTH must be an integer of at least 280");
+assert.ok(Number.isInteger(phoneHeight) && phoneHeight >= 320, "PHONE_HEIGHT must be an integer of at least 320");
 
 const fixtureMeals = [
   ["caprese-skewers", "Caprese Skewers"],
@@ -341,12 +348,22 @@ try {
       document.querySelector("#menu-change-status").hidden &&
       state.requiredMeals.has(pinId) &&
       state.excludedMealIds.has(removeId) &&
+      document.querySelectorAll("#selected-meals .meal-card").length === 5 &&
       document.querySelector(`[data-pin-meal-id="${pinId}"]`)?.getAttribute("aria-pressed") === "true" &&
       !document.querySelector(`[data-reject-meal-id="${removeId}"]`),
     "regenerated pinned and excluded menu",
     pinnedMealId,
     removedMealId,
   );
+
+  const regeneratedIds = await evaluate(() =>
+    [...document.querySelectorAll("[data-pin-meal-id]")].map(button => button.dataset.pinMealId),
+  );
+  const replacementIds = regeneratedIds.filter(id => !initial.ids.includes(id));
+  assert.equal(regeneratedIds.length, 5);
+  assert.ok(regeneratedIds.includes(pinnedMealId));
+  assert.ok(!regeneratedIds.includes(removedMealId));
+  assert.ok(replacementIds.length >= 1, "regeneration did not render a replacement meal");
 
   if (fixtureServer) {
     assert.equal(resolveRequests.length, 2);
@@ -355,8 +372,8 @@ try {
   }
 
   await send("Emulation.setDeviceMetricsOverride", {
-    width: 390,
-    height: 844,
+    width: phoneWidth,
+    height: phoneHeight,
     deviceScaleFactor: 1,
     mobile: true,
   });
@@ -376,8 +393,29 @@ try {
         opacity: Number(style.opacity),
         width: rect.width,
         height: rect.height,
+        labelFits: button.scrollWidth <= button.clientWidth && button.scrollHeight <= button.clientHeight,
       };
     }),
+    viewport: {
+      screenWidth: screen.width,
+      visualWidth: visualViewport?.width ?? innerWidth,
+      layoutWidth: innerWidth,
+      documentWidth: Math.max(document.documentElement.scrollWidth, document.body.scrollWidth),
+    },
+    headingButtons: [...document.querySelectorAll(".action-heading button")]
+      .filter(button => button.getClientRects().length > 0)
+      .map(button => {
+        const rect = button.getBoundingClientRect();
+        const panelRect = button.closest(".panel").getBoundingClientRect();
+        return {
+          id: button.id,
+          left: rect.left,
+          right: rect.right,
+          panelLeft: panelRect.left,
+          panelRight: panelRect.right,
+          withinPanel: rect.left >= panelRect.left && rect.right <= panelRect.right,
+        };
+      }),
     regenerate: (() => {
       const rect = document.querySelector("#regenerate-menu").getBoundingClientRect();
       return { width: rect.width, height: rect.height };
@@ -394,8 +432,110 @@ try {
     assert.notEqual(button.display, "none");
     assert.equal(button.visibility, "visible");
     assert.ok(button.opacity > 0 && button.width > 0 && button.height >= 44);
+    assert.equal(button.labelFits, true);
   });
-  assert.ok(mobile.regenerate.width >= 300 && mobile.regenerate.height >= 46);
+  assert.equal(mobile.viewport.screenWidth, phoneWidth);
+  assert.ok(
+    mobile.viewport.documentWidth <= phoneWidth,
+    `horizontal overflow at ${phoneWidth}px: ${JSON.stringify(mobile.viewport)}`,
+  );
+  mobile.headingButtons.forEach(button => {
+    assert.equal(button.withinPanel, true, `${button.id} overflows its panel: ${JSON.stringify(button)}`);
+  });
+  assert.ok(mobile.regenerate.width >= phoneWidth - 40 && mobile.regenerate.height >= 46);
+
+  if (formScreenshotPath) {
+    const formClip = await evaluate(() => {
+      const firstPanel = document.querySelector("#guaranteed-heading").closest(".panel").getBoundingClientRect();
+      const lastPanel = document.querySelector("#inventory-heading").closest(".panel").getBoundingClientRect();
+      return {
+        x: Math.min(firstPanel.left, lastPanel.left) + scrollX,
+        y: firstPanel.top + scrollY,
+        width: Math.max(firstPanel.right, lastPanel.right) - Math.min(firstPanel.left, lastPanel.left),
+        height: lastPanel.bottom - firstPanel.top,
+        scale: 1,
+      };
+    });
+    const formScreenshot = await send("Page.captureScreenshot", {
+      format: "png",
+      captureBeyondViewport: true,
+      clip: formClip,
+    });
+    assert.ok(formScreenshot.data.length > 1_000);
+    await writeFile(formScreenshotPath, Buffer.from(formScreenshot.data, "base64"));
+  }
+
+  await evaluate(() => {
+    document.querySelector(".advanced-panel").open = true;
+    const slider = document.querySelector(".weight-input");
+    const sliderTop = slider.getBoundingClientRect().top + scrollY;
+    window.scrollTo({ top: sliderTop - (innerHeight - slider.offsetHeight) / 2, behavior: "instant" });
+  });
+  await new Promise(resolve => setTimeout(resolve, 200));
+  const sliderBefore = await evaluate(() => {
+    const slider = document.querySelector(".weight-input");
+    const rect = slider.getBoundingClientRect();
+    return {
+      value: Number(slider.value),
+      output: slider.closest(".weight").querySelector("output").textContent.trim(),
+      progress: slider.style.getPropertyValue("--range-progress").trim(),
+      touchAction: getComputedStyle(slider).touchAction,
+      rect: { left: rect.left, right: rect.right, top: rect.top, width: rect.width, height: rect.height },
+    };
+  });
+  assert.ok(sliderBefore.rect.width >= 200, `slider is too narrow: ${JSON.stringify(sliderBefore.rect)}`);
+  assert.ok(sliderBefore.rect.height >= 44);
+  assert.equal(sliderBefore.touchAction, "pan-y");
+  assert.equal(sliderBefore.progress, `${Math.round(sliderBefore.value * 100)}%`);
+
+  const touchY = sliderBefore.rect.top + sliderBefore.rect.height / 2;
+  const touchStartX = sliderBefore.rect.right - 13;
+  const touchEndX = sliderBefore.rect.left + sliderBefore.rect.width * 0.25;
+  await send("Input.dispatchTouchEvent", {
+    type: "touchStart",
+    touchPoints: [{ x: touchStartX, y: touchY, radiusX: 12, radiusY: 12, force: 1, id: 1 }],
+  });
+  for (let step = 1; step <= 4; step += 1) {
+    const x = touchStartX + (touchEndX - touchStartX) * (step / 4);
+    await send("Input.dispatchTouchEvent", {
+      type: "touchMove",
+      touchPoints: [{ x, y: touchY, radiusX: 12, radiusY: 12, force: 1, id: 1 }],
+    });
+  }
+  await send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  await new Promise(resolve => setTimeout(resolve, 100));
+
+  const sliderAfter = await evaluate(() => {
+    const slider = document.querySelector(".weight-input");
+    return {
+      value: Number(slider.value),
+      output: slider.closest(".weight").querySelector("output").textContent.trim(),
+      progress: slider.style.getPropertyValue("--range-progress").trim(),
+    };
+  });
+  assert.ok(sliderAfter.value < sliderBefore.value, `touch drag did not change slider: ${JSON.stringify({ sliderBefore, sliderAfter })}`);
+  assert.equal(sliderAfter.output, `${Math.round(sliderAfter.value * 100)}%`);
+  assert.equal(sliderAfter.progress, sliderAfter.output);
+
+  if (sliderScreenshotPath) {
+    const sliderClip = await evaluate(() => {
+      const rect = document.querySelector(".weight").getBoundingClientRect();
+      return {
+        x: rect.left + scrollX,
+        y: rect.top + scrollY,
+        width: rect.width,
+        height: rect.height,
+        scale: 1,
+      };
+    });
+    const sliderScreenshot = await send("Page.captureScreenshot", {
+      format: "png",
+      captureBeyondViewport: true,
+      clip: sliderClip,
+    });
+    assert.ok(sliderScreenshot.data.length > 1_000);
+    await writeFile(sliderScreenshotPath, Buffer.from(sliderScreenshot.data, "base64"));
+  }
 
   const cardClip = await evaluate(pinId => {
     const card = document.querySelector(`[data-pin-meal-id="${pinId}"]`).closest(".meal-card");
@@ -430,11 +570,16 @@ try {
   console.log("PASS: selected meal cards visibly render Pin/Unpin and Remove on desktop and mobile");
   console.log(`  pinned=${pinnedMealId}`);
   console.log(`  removed=${removedMealId}`);
+  console.log(`  replacements=${replacementIds.join(",")}`);
   console.log(`  desktopCards=${initial.cards.length}`);
+  console.log(`  phoneViewport=${phoneWidth}x${phoneHeight}, documentWidth=${mobile.viewport.documentWidth}`);
   console.log(`  mobileActionHeight=${mobile.actionButtons[0].height}`);
   console.log(`  mobileRegenerate=${mobile.regenerate.width}x${mobile.regenerate.height}`);
+  console.log(`  mobileSlider=${sliderBefore.rect.width}x${sliderBefore.rect.height}, ${sliderBefore.output}->${sliderAfter.output} by touch`);
   if (fixtureServer) console.log("  API state payloads verified with an isolated fixture server (MongoDB untouched)");
   if (screenshotPath) console.log(`  screenshot=${screenshotPath}`);
+  if (formScreenshotPath) console.log(`  formScreenshot=${formScreenshotPath}`);
+  if (sliderScreenshotPath) console.log(`  sliderScreenshot=${sliderScreenshotPath}`);
 } finally {
   pageSocket?.close();
   if (browser.exitCode === null) {
