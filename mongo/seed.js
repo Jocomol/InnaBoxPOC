@@ -16,6 +16,9 @@ db.products.createIndex({ sku: 1 }, { unique: true });
 db.products.createIndex({ concept: 1 });
 db.products.createIndex({ capabilities: 1 });
 db.planningPriorities.createIndex({ id: 1 }, { unique: true });
+db.dietaryConstraints.createIndex({ id: 1 }, { unique: true });
+db.mealCategories.createIndex({ id: 1 }, { unique: true });
+db.meals.createIndex({ categoryIds: 1 });
 
 const planningPriorities = [
   {
@@ -68,6 +71,37 @@ const planningPriorities = [
     lowLabel: "Lower priority",
     highLabel: "Lower impact"
   }
+];
+
+const dietaryConstraints = [
+  {
+    id: "vegetarian",
+    label: "Vegetarian",
+    description: "Only select meals that are marked as vegetarian.",
+    displayOrder: 10,
+    requiredCapabilities: ["vegetarian"],
+    excludedCapabilities: [],
+    excludedConcepts: []
+  },
+  {
+    id: "vegan",
+    label: "Vegan",
+    description: "Only select meals that are marked as vegan.",
+    displayOrder: 20,
+    requiredCapabilities: ["vegan"],
+    excludedCapabilities: [],
+    excludedConcepts: []
+  }
+];
+
+const mealCategories = [
+  { id: "fruit", label: "Fruit", description: "Fruit cups, salads, skewers, and fruit-forward dishes.", displayOrder: 10 },
+  { id: "bakery", label: "Bakery & Pastries", description: "Croissants, quiches, baked bites, and pastry-based dishes.", displayOrder: 20 },
+  { id: "meat", label: "Meat", description: "Dishes that contain meat or meat-based components.", displayOrder: 30 },
+  { id: "plant-based", label: "Vegetarian & Plant-based", description: "Vegetarian and vegan dishes.", displayOrder: 40 },
+  { id: "breakfast", label: "Breakfast & Brunch", description: "Breakfast, brunch, and coffee-break dishes.", displayOrder: 50 },
+  { id: "lunch", label: "Lunch & Buffet", description: "Hearty lunch and buffet dishes.", displayOrder: 60 },
+  { id: "reception", label: "Apéro & Reception", description: "Finger food and reception-friendly bites.", displayOrder: 70 }
 ];
 
 const eventTemplates = [
@@ -341,6 +375,7 @@ const eventTemplates = [
 const meals = [
   {
     id: "caprese-skewers",
+    categoryIds: ["plant-based", "reception"],
     name: "Caprese Skewers",
     capabilities: ["vegetarian", "savory", "finger-food", "cold", "apero", "prepare-ahead"],
     serving: { piecesPerServing: 2 },
@@ -353,6 +388,7 @@ const meals = [
   },
   {
     id: "mini-spinach-quiche",
+    categoryIds: ["bakery", "plant-based", "reception"],
     name: "Mini Spinach Quiche",
     capabilities: ["vegetarian", "savory", "finger-food", "warm", "apero"],
     serving: { piecesPerServing: 2 },
@@ -361,6 +397,7 @@ const meals = [
   },
   {
     id: "falafel-bites",
+    categoryIds: ["plant-based", "reception"],
     name: "Falafel Bites",
     capabilities: ["vegan", "vegetarian", "savory", "finger-food", "warm", "apero"],
     serving: { piecesPerServing: 3 },
@@ -372,6 +409,7 @@ const meals = [
   },
   {
     id: "ham-croissants",
+    categoryIds: ["bakery", "meat", "reception"],
     name: "Mini Ham Croissants",
     capabilities: ["savory", "finger-food", "warm", "apero"],
     serving: { piecesPerServing: 2 },
@@ -380,6 +418,7 @@ const meals = [
   },
   {
     id: "bircher-muesli",
+    categoryIds: ["breakfast", "plant-based"],
     name: "Bircher Müesli",
     capabilities: ["vegetarian", "sweet", "cold", "brunch", "swiss"],
     serving: { piecesPerServing: 1 },
@@ -392,6 +431,7 @@ const meals = [
   },
   {
     id: "scrambled-eggs",
+    categoryIds: ["breakfast", "plant-based"],
     name: "Scrambled Eggs",
     capabilities: ["vegetarian", "savory", "warm", "brunch"],
     serving: { piecesPerServing: 1 },
@@ -403,6 +443,7 @@ const meals = [
   },
   {
     id: "fruit-salad",
+    categoryIds: ["fruit", "breakfast", "plant-based"],
     name: "Fruit Salad",
     capabilities: ["vegan", "vegetarian", "sweet", "cold", "brunch", "prepare-ahead"],
     serving: { piecesPerServing: 1 },
@@ -411,6 +452,7 @@ const meals = [
   },
   {
     id: "apple-yogurt-parfaits",
+    categoryIds: ["breakfast", "plant-based"],
     name: "Apple Yogurt Parfaits",
     capabilities: ["vegetarian", "sweet", "cold", "coffee-break", "prepare-ahead"],
     serving: { piecesPerServing: 1 },
@@ -423,6 +465,7 @@ const meals = [
   },
   {
     id: "fresh-fruit-cups",
+    categoryIds: ["fruit", "breakfast", "plant-based"],
     name: "Fresh Fruit Cups",
     capabilities: ["vegan", "vegetarian", "sweet", "cold", "coffee-break", "prepare-ahead"],
     serving: { piecesPerServing: 1 },
@@ -431,6 +474,7 @@ const meals = [
   },
   {
     id: "mini-quiche-break-bites",
+    categoryIds: ["bakery", "breakfast", "plant-based"],
     name: "Mini Quiche Break Bites",
     capabilities: ["vegetarian", "savory", "warm", "finger-food", "coffee-break"],
     serving: { piecesPerServing: 2 },
@@ -439,6 +483,7 @@ const meals = [
   },
   {
     id: "ham-croissant-break-bites",
+    categoryIds: ["bakery", "meat", "breakfast"],
     name: "Ham Croissant Break Bites",
     capabilities: ["savory", "warm", "finger-food", "coffee-break"],
     serving: { piecesPerServing: 2 },
@@ -447,6 +492,7 @@ const meals = [
   },
   {
     id: "ham-quiche-lunch-platter",
+    categoryIds: ["bakery", "meat", "lunch"],
     name: "Ham Croissant & Quiche Lunch Platter",
     capabilities: ["savory", "warm", "lunch", "buffet", "hearty"],
     serving: { piecesPerServing: 3 },
@@ -458,6 +504,7 @@ const meals = [
   },
   {
     id: "mediterranean-falafel-bowl",
+    categoryIds: ["plant-based", "lunch"],
     name: "Mediterranean Falafel Bowl",
     capabilities: ["vegan", "vegetarian", "savory", "warm", "lunch", "buffet"],
     serving: { piecesPerServing: 1 },
@@ -470,6 +517,7 @@ const meals = [
   },
   {
     id: "caprese-lunch-bowl",
+    categoryIds: ["plant-based", "lunch"],
     name: "Caprese Lunch Bowl",
     capabilities: ["vegetarian", "savory", "cold", "lunch", "buffet", "prepare-ahead"],
     serving: { piecesPerServing: 1 },
@@ -482,6 +530,7 @@ const meals = [
   },
   {
     id: "falafel-hummus-canapes",
+    categoryIds: ["plant-based", "reception"],
     name: "Falafel Hummus Canapés",
     capabilities: ["vegan", "vegetarian", "savory", "finger-food", "reception", "prepare-ahead"],
     serving: { piecesPerServing: 3 },
@@ -493,6 +542,7 @@ const meals = [
   },
   {
     id: "tomato-basil-bites",
+    categoryIds: ["plant-based", "reception"],
     name: "Tomato Basil Hummus Bites",
     capabilities: ["vegan", "vegetarian", "savory", "finger-food", "cold", "reception", "prepare-ahead"],
     serving: { piecesPerServing: 2 },
@@ -505,6 +555,7 @@ const meals = [
   },
   {
     id: "fruit-skewers",
+    categoryIds: ["fruit", "plant-based", "reception"],
     name: "Fresh Fruit Skewers",
     capabilities: ["vegan", "vegetarian", "sweet", "finger-food", "cold", "reception", "prepare-ahead"],
     serving: { piecesPerServing: 2 },
@@ -513,6 +564,7 @@ const meals = [
   },
   {
     id: "swiss-cheese-omelette",
+    categoryIds: ["breakfast", "plant-based"],
     name: "Swiss Cheese Omelette",
     capabilities: ["vegetarian", "savory", "warm", "breakfast", "swiss"],
     serving: { piecesPerServing: 1 },
@@ -525,6 +577,7 @@ const meals = [
   },
   {
     id: "apple-bircher-jars",
+    categoryIds: ["breakfast", "plant-based"],
     name: "Swiss Apple Bircher Jars",
     capabilities: ["vegetarian", "sweet", "cold", "breakfast", "swiss", "prepare-ahead"],
     serving: { piecesPerServing: 1 },
@@ -630,6 +683,8 @@ upsertMany("eventTemplates", eventTemplates);
 upsertMany("meals", meals);
 upsertMany("products", products);
 upsertMany("planningPriorities", planningPriorities);
+upsertMany("dietaryConstraints", dietaryConstraints);
+upsertMany("mealCategories", mealCategories);
 
 print("------------------------------------------------");
 print("Catering planner seed completed.");

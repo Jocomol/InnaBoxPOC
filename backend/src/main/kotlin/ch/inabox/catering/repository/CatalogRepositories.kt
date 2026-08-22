@@ -1,7 +1,9 @@
 package ch.inabox.catering.repository
 
+import ch.inabox.catering.model.DietaryConstraintDefinition
 import ch.inabox.catering.model.EventTemplate
 import ch.inabox.catering.model.Meal
+import ch.inabox.catering.model.MealCategory
 import ch.inabox.catering.model.PlanningPriority
 import ch.inabox.catering.model.Product
 import org.bson.types.ObjectId
@@ -18,3 +20,7 @@ interface MealRepository : MongoRepository<Meal, ObjectId>
 interface ProductRepository : MongoRepository<Product, ObjectId>
 
 interface PlanningPriorityRepository : MongoRepository<PlanningPriority, ObjectId>
+
+interface DietaryConstraintRepository : MongoRepository<DietaryConstraintDefinition, ObjectId>
+
+interface MealCategoryRepository : MongoRepository<MealCategory, ObjectId>

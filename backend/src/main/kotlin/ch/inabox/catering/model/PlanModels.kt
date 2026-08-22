@@ -5,12 +5,19 @@ data class Quantity(
     val unit: String,
 )
 
+data class AppliedDietaryConstraint(
+    val id: String,
+    val label: String,
+    val description: String,
+)
+
 data class EventSummary(
     val templateId: String,
     val templateName: String,
     val guestCount: Int,
     val servingsPerGuest: Int?,
     val requiredMealIds: Set<String>,
+    val selectedConstraints: List<AppliedDietaryConstraint>,
     val budget: Money,
     val appliedWeights: Map<String, Double>,
     val preferences: CustomerPreferences,
@@ -27,6 +34,18 @@ data class SelectedMeal(
     val preferenceMatches: Set<String>,
     val scoreComponents: Map<String, Double>,
     val finalWeightedScore: Double,
+    val guaranteed: Boolean = false,
+)
+
+data class ConstraintConflict(
+    val mealId: String,
+    val mealName: String,
+    val constraintId: String,
+    val constraintLabel: String,
+    val guaranteed: Boolean,
+    val missingRequiredCapabilities: Set<String> = emptySet(),
+    val excludedCapabilities: Set<String> = emptySet(),
+    val excludedConcepts: Set<String> = emptySet(),
 )
 
 data class FulfilledRequirement(
@@ -81,6 +100,7 @@ data class PlanTotals(
 data class ShoppingPlan(
     val event: EventSummary,
     val selectedMeals: List<SelectedMeal>,
+    val constraintConflicts: List<ConstraintConflict>,
     val fulfilledRequirements: List<FulfilledRequirement>,
     val ingredientRequirements: List<IngredientRequirement>,
     val shoppingItems: List<ShoppingItem>,

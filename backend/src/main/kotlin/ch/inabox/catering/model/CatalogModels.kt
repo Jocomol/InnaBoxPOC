@@ -34,6 +34,27 @@ data class PlanningPriority(
     val highLabel: String? = null,
 )
 
+@Document("dietaryConstraints")
+data class DietaryConstraintDefinition(
+    @Id @get:JsonIgnore val mongoId: ObjectId? = null,
+    @Field("id") @get:JsonProperty("id") val constraintId: String,
+    val label: String,
+    val description: String,
+    val displayOrder: Int = 0,
+    val requiredCapabilities: Set<String> = emptySet(),
+    val excludedCapabilities: Set<String> = emptySet(),
+    val excludedConcepts: Set<String> = emptySet(),
+)
+
+@Document("mealCategories")
+data class MealCategory(
+    @Id @get:JsonIgnore val mongoId: ObjectId? = null,
+    @Field("id") @get:JsonProperty("id") val categoryId: String,
+    val label: String,
+    val description: String = "",
+    val displayOrder: Int = 0,
+)
+
 @Document("eventTemplates")
 data class EventTemplate(
     @Id @get:JsonIgnore val mongoId: ObjectId? = null,
@@ -60,6 +81,7 @@ data class Meal(
     @Id @get:JsonIgnore val mongoId: ObjectId? = null,
     @Field("id") @get:JsonProperty("id") val mealId: String,
     val name: String,
+    val categoryIds: Set<String> = emptySet(),
     val capabilities: Set<String> = emptySet(),
     val serving: ServingInfo = ServingInfo(),
     val ingredients: List<Ingredient> = emptyList(),

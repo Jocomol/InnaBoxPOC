@@ -13,14 +13,18 @@ const templateCount = db.eventTemplates.countDocuments();
 const mealCount = db.meals.countDocuments();
 const productCount = db.products.countDocuments();
 const priorityCount = db.planningPriorities.countDocuments();
+const constraintCount = db.dietaryConstraints.countDocuments();
+const categoryCount = db.mealCategories.countDocuments();
 
-print(`Templates: ${templateCount}`);
-print(`Meals:     ${mealCount}`);
-print(`Products:  ${productCount}`);
-print(`Priorities:${priorityCount.toString().padStart(3, " ")}`);
+print(`Templates:   ${templateCount}`);
+print(`Meals:       ${mealCount}`);
+print(`Products:    ${productCount}`);
+print(`Priorities:  ${priorityCount}`);
+print(`Constraints: ${constraintCount}`);
+print(`Categories:  ${categoryCount}`);
 
-if (templateCount < 6 || mealCount < 19 || productCount < 17 || priorityCount < 5) {
-  throw new Error("Seed catalog is incomplete; expected at least 6 templates, 19 meals, 17 products, and 5 planning priorities.");
+if (templateCount < 6 || mealCount < 19 || productCount < 17 || priorityCount < 5 || constraintCount < 2 || categoryCount < 1) {
+  throw new Error("Seed catalog is incomplete; expected at least 6 templates, 19 meals, 17 products, 5 planning priorities, 2 dietary constraints, and 1 meal category.");
 }
 
 const definedPriorityIds = new Set(db.planningPriorities.find({}, { id: 1 }).toArray().map(priority => priority.id));
@@ -42,6 +46,30 @@ db.eventTemplates.find().forEach(template => {
 
 if (undefinedPriorityReferences.length > 0) {
   throw new Error(`Score or weight keys without planning-priority metadata: ${undefinedPriorityReferences.join(", ")}`);
+}
+
+const definedCategoryIds = new Set(db.mealCategories.find({}, { id: 1 }).toArray().map(category => category.id));
+const undefinedCategoryReferences = [];
+db.meals.find().forEach(meal => {
+  (meal.categoryIds || []).forEach(categoryId => {
+    if (!definedCategoryIds.has(categoryId)) undefinedCategoryReferences.push(`meals/${meal.id}/${categoryId}`);
+  });
+});
+if (undefinedCategoryReferences.length > 0) {
+  throw new Error(`Meal category IDs without category metadata: ${undefinedCategoryReferences.join(", ")}`);
+}
+
+const invalidConstraints = [];
+db.dietaryConstraints.find().forEach(constraint => {
+  const ruleCount = (constraint.requiredCapabilities || []).length +
+    (constraint.excludedCapabilities || []).length +
+    (constraint.excludedConcepts || []).length;
+  if (!constraint.id || !constraint.label || ruleCount === 0) {
+    invalidConstraints.push(constraint.id || "<missing-id>");
+  }
+});
+if (invalidConstraints.length > 0) {
+  throw new Error(`Dietary constraints without usable metadata/rules: ${invalidConstraints.join(", ")}`);
 }
 
 const missingTemplates = expectedTemplateIds.filter(id => !db.eventTemplates.findOne({ id }));
@@ -115,4 +143,16 @@ db.eventTemplates.find({}, { id: 1, name: 1 }).sort({ id: 1 }).forEach(template 
 });
 
 print("");
-print("All requirements, ingredients, and priority metadata resolve; Swiss scores match origin data.");
+print("Dietary constraints:");
+db.dietaryConstraints.find({}, { id: 1, label: 1 }).sort({ displayOrder: 1 }).forEach(constraint => {
+  print(` - ${constraint.label} (${constraint.id})`);
+});
+
+print("");
+print("Meal categories:");
+db.mealCategories.find({}, { id: 1, label: 1 }).sort({ displayOrder: 1 }).forEach(category => {
+  print(` - ${category.label} (${category.id})`);
+});
+
+print("");
+print("All requirements, ingredients, priorities, constraints, categories, and Swiss scores validate.");

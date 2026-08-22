@@ -1,6 +1,9 @@
 package ch.inabox.catering.service
 
+import ch.inabox.catering.model.AppliedDietaryConstraint
+import ch.inabox.catering.model.ConstraintConflict
 import ch.inabox.catering.model.CustomerPreferences
+import ch.inabox.catering.model.DietaryConstraintDefinition
 import ch.inabox.catering.model.EventSummary
 import ch.inabox.catering.model.EventTemplate
 import ch.inabox.catering.model.FulfilledRequirement
@@ -33,6 +36,7 @@ class PlannerEngine {
         template: EventTemplate,
         meals: List<Meal>,
         products: List<Product>,
+        selectedConstraints: List<DietaryConstraintDefinition>,
         request: ResolvePlanRequest,
     ): ShoppingPlan {
         validateRequest(request)
@@ -42,7 +46,7 @@ class PlannerEngine {
             preferredCapabilities = normalizeCapabilities(request.preferences.preferredCapabilities),
         )
         val weights = resolveWeights(template.weights, request.weights)
-        val requiredMeals = resolveRequiredMeals(request.requiredMealIds, meals, constraints)
+        val requiredMeals = resolveRequiredMeals(request.requiredMealIds, meals)
         val requiredMealsById = requiredMeals.associateBy { it.mealId }
         val unassignedRequiredMealIds = requiredMealsById.keys.toSortedSet()
         val assignedMealIds = mutableSetOf<String>()
@@ -57,8 +61,7 @@ class PlannerEngine {
             .mapNotNull { requirement ->
                 val requiredCapabilities = normalizeCapabilities(requirement.requiredCapabilities) + constraints.requiredCapabilities
                 val candidates = meals.asSequence()
-                    .filter { normalizeCapabilities(it.capabilities).containsAll(requiredCapabilities) }
-                    .filter { normalizeCapabilities(it.capabilities).intersect(constraints.excludedCapabilities).isEmpty() }
+                    .filter { mealAllowed(it, requiredCapabilities, constraints) }
                     .toList()
 
                 val forcedCandidates = candidates.filter { it.mealId in unassignedRequiredMealIds }
@@ -90,13 +93,13 @@ class PlannerEngine {
             val requirement = TemplateRequirement(
                 requirementId = "guaranteed-$mealId",
                 type = "meal",
-                requiredCapabilities = constraints.requiredCapabilities,
+                requiredCapabilities = emptySet(),
                 target = RequirementTarget(amount = 1.0, unit = "servings-per-guest"),
                 required = true,
             )
             mealSelections += MealSelection(
                 requirement = requirement,
-                requiredCapabilities = constraints.requiredCapabilities,
+                requiredCapabilities = emptySet(),
                 scored = selectMeal(listOf(meal), weights, preferences)!!,
                 target = mealTarget(requirement, template, request.guestCount, meal, preferences),
             )
@@ -118,6 +121,7 @@ class PlannerEngine {
                 preferenceMatches = scored.preferenceMatches,
                 scoreComponents = scored.components,
                 finalWeightedScore = decimal(scored.weightedScore, 4),
+                guaranteed = scored.candidate.mealId in requiredMealsById,
             )
             fulfilledRequirements += FulfilledRequirement(
                 requirementId = requirement.requirementId,
@@ -139,6 +143,7 @@ class PlannerEngine {
                 }
                 accumulator.amountBase += base.amount
                 accumulator.sourceMealIds += scored.candidate.mealId
+                if (scored.candidate.mealId in requiredMealsById) accumulator.allowConstraintOverride = true
             }
         }
 
@@ -176,7 +181,7 @@ class PlannerEngine {
         ingredientNeeds.values.forEach { need ->
             val candidates = products.asSequence()
                 .filter { it.concept == need.concept }
-                .filter { productAllowed(it, constraints) }
+                .filter { need.allowConstraintOverride || productAllowed(it, constraints) }
                 .filter { UnitConverter.dimension(it.packageInfo.unit) == need.dimension }
                 .toList()
             val scored = selectProduct(candidates, weights, preferences)
@@ -215,6 +220,17 @@ class PlannerEngine {
             )
         }
 
+        val constraintConflicts = findConstraintConflicts(
+            selectedMeals = selectedMeals,
+            meals = meals,
+            selectedConstraints = selectedConstraints,
+            guaranteedMealIds = requiredMealsById.keys,
+        )
+        constraintConflicts.forEach { conflict ->
+            val prefix = if (conflict.guaranteed) "Guaranteed meal" else "Selected meal"
+            warnings += "$prefix '${conflict.mealName}' conflicts with dietary constraint '${conflict.constraintLabel}'."
+        }
+
         return ShoppingPlan(
             event = EventSummary(
                 templateId = template.templateId,
@@ -222,12 +238,16 @@ class PlannerEngine {
                 guestCount = request.guestCount,
                 servingsPerGuest = request.servingsPerGuest,
                 requiredMealIds = requiredMealsById.keys.toSortedSet(),
+                selectedConstraints = selectedConstraints
+                    .sortedWith(compareBy({ it.displayOrder }, { it.constraintId }))
+                    .map { AppliedDietaryConstraint(it.constraintId, it.label, it.description) },
                 budget = Money(money(request.budget)),
                 appliedWeights = weights.mapValues { decimal(it.value, 4) },
                 preferences = preferences,
                 hardConstraints = constraints,
             ),
             selectedMeals = selectedMeals,
+            constraintConflicts = constraintConflicts,
             fulfilledRequirements = fulfilledRequirements,
             ingredientRequirements = ingredientRequirements,
             shoppingItems = shoppingItems,
@@ -263,7 +283,6 @@ class PlannerEngine {
     private fun resolveRequiredMeals(
         requestedIds: Set<String>,
         meals: List<Meal>,
-        constraints: HardConstraints,
     ): List<Meal> {
         if (requestedIds.isEmpty()) return emptyList()
 
@@ -274,28 +293,10 @@ class PlannerEngine {
             throw PlanResolutionException("Unknown required meal IDs: ${missingIds.joinToString()}")
         }
 
-        return normalizedIds.map { mealsByNormalizedId.getValue(it) }.distinctBy { it.mealId }.sortedBy { it.mealId }.onEach { meal ->
-            val capabilities = normalizeCapabilities(meal.capabilities)
-            val missingCapabilities = constraints.requiredCapabilities - capabilities
-            if (missingCapabilities.isNotEmpty()) {
-                throw PlanResolutionException(
-                    "Required meal '${meal.mealId}' does not satisfy hard capabilities ${missingCapabilities.sorted()}",
-                )
-            }
-            val excludedCapabilities = capabilities.intersect(constraints.excludedCapabilities)
-            if (excludedCapabilities.isNotEmpty()) {
-                throw PlanResolutionException(
-                    "Required meal '${meal.mealId}' has excluded capabilities ${excludedCapabilities.sorted()}",
-                )
-            }
-            val excludedIngredients = meal.ingredients.map { it.concept.trim().lowercase() }
-                .intersect(constraints.excludedConcepts)
-            if (excludedIngredients.isNotEmpty()) {
-                throw PlanResolutionException(
-                    "Required meal '${meal.mealId}' uses excluded ingredients ${excludedIngredients.sorted()}",
-                )
-            }
-        }
+        return normalizedIds
+            .map { mealsByNormalizedId.getValue(it) }
+            .distinctBy { it.mealId }
+            .sortedBy { it.mealId }
     }
 
     private fun resolveWeights(defaults: Map<String, Double>, overrides: Map<String, Double>): Map<String, Double> {
@@ -321,6 +322,64 @@ class PlannerEngine {
 
     private fun normalizeCapabilities(capabilities: Collection<String>): Set<String> =
         capabilities.map { it.trim().lowercase() }.filter { it.isNotBlank() }.toSortedSet()
+
+    private fun mealAllowed(
+        meal: Meal,
+        requiredCapabilities: Set<String>,
+        constraints: HardConstraints,
+    ): Boolean {
+        val capabilities = normalizeCapabilities(meal.capabilities)
+        val ingredientConcepts = meal.ingredients
+            .map { it.concept.trim().lowercase() }
+            .filter { it.isNotBlank() }
+            .toSet()
+        return capabilities.containsAll(requiredCapabilities) &&
+            capabilities.intersect(constraints.excludedCapabilities).isEmpty() &&
+            ingredientConcepts.intersect(constraints.excludedConcepts).isEmpty()
+    }
+
+    private fun findConstraintConflicts(
+        selectedMeals: List<SelectedMeal>,
+        meals: List<Meal>,
+        selectedConstraints: List<DietaryConstraintDefinition>,
+        guaranteedMealIds: Set<String>,
+    ): List<ConstraintConflict> {
+        if (selectedConstraints.isEmpty() || selectedMeals.isEmpty()) return emptyList()
+        val mealsById = meals.associateBy { it.mealId }
+        return selectedMeals.flatMap { selected ->
+            val meal = mealsById[selected.mealId] ?: return@flatMap emptyList()
+            val capabilities = normalizeCapabilities(meal.capabilities)
+            val ingredientConcepts = meal.ingredients
+                .map { it.concept.trim().lowercase() }
+                .filter { it.isNotBlank() }
+                .toSet()
+            selectedConstraints.mapNotNull { constraint ->
+                val required = normalizeCapabilities(constraint.requiredCapabilities)
+                val excluded = normalizeCapabilities(constraint.excludedCapabilities)
+                val excludedConcepts = constraint.excludedConcepts
+                    .map { it.trim().lowercase() }
+                    .filter { it.isNotBlank() }
+                    .toSet()
+                val missingRequired = required - capabilities
+                val conflictingCapabilities = capabilities.intersect(excluded)
+                val conflictingConcepts = ingredientConcepts.intersect(excludedConcepts)
+                if (missingRequired.isEmpty() && conflictingCapabilities.isEmpty() && conflictingConcepts.isEmpty()) {
+                    null
+                } else {
+                    ConstraintConflict(
+                        mealId = selected.mealId,
+                        mealName = selected.name,
+                        constraintId = constraint.constraintId,
+                        constraintLabel = constraint.label,
+                        guaranteed = selected.mealId in guaranteedMealIds,
+                        missingRequiredCapabilities = missingRequired.toSortedSet(),
+                        excludedCapabilities = conflictingCapabilities.toSortedSet(),
+                        excludedConcepts = conflictingConcepts.toSortedSet(),
+                    )
+                }
+            }
+        }.sortedWith(compareBy(ConstraintConflict::mealName, ConstraintConflict::constraintLabel))
+    }
 
     private fun productAllowed(product: Product, constraints: HardConstraints): Boolean =
         product.concept.lowercase() !in constraints.excludedConcepts &&
@@ -593,6 +652,7 @@ class PlannerEngine {
         val baseUnit: String,
         var amountBase: Double = 0.0,
         val sourceMealIds: MutableSet<String> = sortedSetOf(),
+        var allowConstraintOverride: Boolean = false,
     )
 
     private data class ProductAccumulator(
