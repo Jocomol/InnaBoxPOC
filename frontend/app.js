@@ -625,24 +625,47 @@ function renderPlan(plan) {
 
 function renderConstraintWarningSummary(conflicts) {
   const target = document.querySelector('#constraint-warning-summary');
-  target.hidden = !conflicts.length;
-  if (!conflicts.length) {
+  const meaningfulConflicts = (Array.isArray(conflicts) ? conflicts : []).filter(conflict => {
+    if (!conflict) return false;
+    const hasIdentity = String(conflict.constraintLabel || conflict.constraintId || conflict.mealName || conflict.mealId || '').trim();
+    const hasDetails = [
+      conflict.missingRequiredCapabilities,
+      conflict.excludedCapabilities,
+      conflict.excludedConcepts
+    ].some(values => Array.isArray(values) && values.length > 0);
+    return Boolean(hasIdentity || hasDetails);
+  });
+
+  if (!meaningfulConflicts.length) {
     target.innerHTML = '';
+    target.hidden = true;
     return;
   }
-  const guaranteed = conflicts.filter(conflict => conflict.guaranteed);
+
+  const guaranteed = meaningfulConflicts.filter(conflict => conflict.guaranteed);
   target.innerHTML = `
-    <strong>⚠ ${conflicts.length} dietary constraint exception${conflicts.length === 1 ? '' : 's'} in this plan</strong>
+    <strong>⚠ ${meaningfulConflicts.length} dietary constraint exception${meaningfulConflicts.length === 1 ? '' : 's'} in this plan</strong>
     <p>${guaranteed.length
       ? `${guaranteed.length} exception${guaranteed.length === 1 ? '' : 's'} come from dishes you explicitly guaranteed. They remain in the plan, but should be reviewed before service.`
       : 'Review the highlighted recipes before service.'}</p>
   `;
+  target.hidden = false;
 }
 
 function renderWarnings(warnings) {
   const element = document.querySelector('#warnings');
-  element.hidden = !warnings.length;
-  element.innerHTML = warnings.map(warning => `<div>${escapeHtml(warning)}</div>`).join('');
+  const meaningfulWarnings = (Array.isArray(warnings) ? warnings : [])
+    .map(warning => String(warning ?? '').trim())
+    .filter(Boolean);
+
+  if (!meaningfulWarnings.length) {
+    element.innerHTML = '';
+    element.hidden = true;
+    return;
+  }
+
+  element.innerHTML = meaningfulWarnings.map(warning => `<div>${escapeHtml(warning)}</div>`).join('');
+  element.hidden = false;
 }
 
 function renderTotals(totals) {
