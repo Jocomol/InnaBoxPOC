@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="description" content="Deterministic catering and shopping plan generator">
   <title>Tableplan — Catering planner</title>
-  <link rel="stylesheet" href="styles.css">
-  <script src="app.js" defer></script>
+  <link rel="stylesheet" href="styles.css?v=pin-reject-actions-1">
+  <script src="app.js?v=pin-reject-actions-1" defer></script>
 </head>
 <body>
   <header class="site-header">
@@ -150,10 +150,15 @@
       <div id="totals" class="totals"></div>
 
       <section class="result-section">
-        <div class="result-section-heading">
-          <h3>Selected menu</h3>
-          <p>Dietary serving matches are shown on each selected recipe.</p>
+        <div class="result-section-heading menu-result-heading">
+          <div>
+            <h3>Selected menu</h3>
+            <p>Pin dishes to keep them, or remove dishes from the next generation.</p>
+          </div>
+          <button id="regenerate-menu" class="primary-small-button" type="button">Regenerate menu</button>
         </div>
+        <div id="menu-change-status" class="menu-change-status" role="status" aria-live="polite" hidden></div>
+        <div id="excluded-meals" class="excluded-meals" hidden></div>
         <div id="selected-meals" class="meal-grid"></div>
       </section>
 

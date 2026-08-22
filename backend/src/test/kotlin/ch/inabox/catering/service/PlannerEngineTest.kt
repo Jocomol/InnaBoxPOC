@@ -819,6 +819,189 @@ class PlannerEngineTest {
         assertEquals(40, explicitRequiredPlan.selectedMeals.sumOf { it.servings })
     }
 
+    @Test
+    fun `legacy selector skips an excluded high-scoring meal before weighting`() {
+        val template = broadMealTemplate()
+        val highest = meal("highest", setOf("savory"), "highest-food", 1.0)
+        val nextBest = meal("next-best", setOf("savory"), "next-best-food", 0.8)
+        val meals = listOf(highest, nextBest)
+
+        val plan = engine.resolve(
+            template,
+            meals,
+            productsFor(meals),
+            ResolvePlanRequest(
+                templateId = template.templateId,
+                guestCount = 10,
+                budget = 1_000.0,
+                excludedMealIds = setOf("  HIGHEST  "),
+            ),
+        )
+
+        assertEquals("next-best", plan.selectedMeals.single().mealId)
+        assertEquals(setOf("highest"), plan.event.excludedMealIds)
+    }
+
+    @Test
+    fun `enhanced selector fills meal count while keeping a pinned meal and excluding a winner`() {
+        val template = broadMealTemplate()
+        val meals = (1..6).map { index ->
+            meal("meal-$index", setOf("savory"), "food-$index", 1.0 - index * 0.1)
+        }
+
+        val plan = engine.resolve(
+            template,
+            meals,
+            productsFor(meals),
+            ResolvePlanRequest(
+                templateId = template.templateId,
+                guestCount = 20,
+                budget = 1_000.0,
+                servingsPerGuest = 2,
+                mealCount = 5,
+                requiredMealIds = setOf("meal-6"),
+                excludedMealIds = setOf("meal-1"),
+            ),
+        )
+
+        assertEquals(5, plan.selectedMeals.size)
+        assertEquals(5, plan.selectedMeals.map { it.mealId }.distinct().size)
+        assertTrue(plan.selectedMeals.any { it.mealId == "meal-6" && it.guaranteed })
+        assertTrue(plan.selectedMeals.none { it.mealId == "meal-1" })
+        assertEquals(40, plan.selectedMeals.sumOf { it.servings })
+    }
+
+    @Test
+    fun `rejects case-insensitive required and excluded meal overlap`() {
+        val template = broadMealTemplate()
+        val falafel = meal("falafel-bites", setOf("savory"), "falafel-food", 1.0)
+
+        val exception = assertThrows<IllegalArgumentException> {
+            engine.resolve(
+                template,
+                listOf(falafel),
+                productsFor(listOf(falafel)),
+                ResolvePlanRequest(
+                    templateId = template.templateId,
+                    guestCount = 10,
+                    budget = 1_000.0,
+                    requiredMealIds = setOf(" falafel-bites "),
+                    excludedMealIds = setOf("FALAFEL-BITES"),
+                ),
+            )
+        }
+
+        assertEquals(
+            "Meal IDs cannot be both required and excluded: falafel-bites",
+            exception.message,
+        )
+    }
+
+    @Test
+    fun `rejects blank and unknown excluded meal IDs clearly`() {
+        val template = broadMealTemplate()
+        val catalogMeal = meal("catalog-meal", setOf("savory"), "catalog-food", 1.0)
+        val products = productsFor(listOf(catalogMeal))
+
+        val blankException = assertThrows<IllegalArgumentException> {
+            engine.resolve(
+                template,
+                listOf(catalogMeal),
+                products,
+                ResolvePlanRequest(
+                    templateId = template.templateId,
+                    guestCount = 10,
+                    budget = 1_000.0,
+                    excludedMealIds = setOf("   "),
+                ),
+            )
+        }
+        val unknownException = assertThrows<PlanResolutionException> {
+            engine.resolve(
+                template,
+                listOf(catalogMeal),
+                products,
+                ResolvePlanRequest(
+                    templateId = template.templateId,
+                    guestCount = 10,
+                    budget = 1_000.0,
+                    excludedMealIds = setOf("does-not-exist"),
+                ),
+            )
+        }
+
+        assertEquals("Excluded meal IDs must not be blank", blankException.message)
+        assertEquals("Unknown excluded meal IDs: does-not-exist", unknownException.message)
+    }
+
+    @Test
+    fun `dietary coverage uses another valid meal when the preferred option is excluded`() {
+        val template = broadMealTemplate()
+        val preferredHalal = meal(
+            "preferred-halal",
+            setOf("savory"),
+            "preferred-halal-food",
+            1.0,
+            setOf("halal"),
+        )
+        val fallbackHalal = meal(
+            "fallback-halal",
+            setOf("savory"),
+            "fallback-halal-food",
+            0.5,
+            setOf("halal"),
+        )
+        val plain = meal("plain", setOf("savory"), "plain-food", 0.9)
+        val meals = listOf(preferredHalal, fallbackHalal, plain)
+
+        val plan = engine.resolve(
+            template,
+            meals,
+            productsFor(meals),
+            ResolvePlanRequest(
+                templateId = template.templateId,
+                guestCount = 10,
+                budget = 1_000.0,
+                servingsPerGuest = 1,
+                mealCount = 1,
+                dietaryShares = mapOf("halal" to 1.0),
+                excludedMealIds = setOf("preferred-halal"),
+            ),
+        )
+
+        assertEquals("fallback-halal", plan.selectedMeals.single().mealId)
+        assertEquals(10, dietaryServings(plan.selectedMeals, meals, "halal"))
+        assertTrue(plan.selectedMeals.none { it.mealId == "preferred-halal" })
+    }
+
+    @Test
+    fun `strict dietary behavior still fails when all matching meals are excluded`() {
+        val template = broadMealTemplate()
+        val halal = meal("only-halal", setOf("savory"), "halal-food", 1.0, setOf("halal"))
+        val plain = meal("plain", setOf("savory"), "plain-food", 0.8)
+        val meals = listOf(halal, plain)
+
+        val exception = assertThrows<PlanResolutionException> {
+            engine.resolve(
+                template,
+                meals,
+                productsFor(meals),
+                ResolvePlanRequest(
+                    templateId = template.templateId,
+                    guestCount = 10,
+                    budget = 1_000.0,
+                    servingsPerGuest = 1,
+                    mealCount = 1,
+                    dietaryShares = mapOf("halal" to 1.0),
+                    excludedMealIds = setOf("only-halal"),
+                ),
+            )
+        }
+
+        assertTrue(exception.message!!.contains("halal"))
+        assertTrue(exception.message!!.contains("meal-like"))
+    }
+
     private fun broadMealTemplate(defaultMealCount: Double? = null) = EventTemplate(
         templateId = "broad-meal",
         name = "Broad meal",

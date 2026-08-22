@@ -87,6 +87,57 @@ jq -e '[.selectedMeals[].servings] | add == 400' "${two_meals}" >/dev/null ||
 jq -e '[.selectedMeals[].servings] | add == 400' "${five_meals}" >/dev/null ||
   fail "mealCount=5 multiplied or lost total servings"
 
+pinned_meal_id="$(jq -r '.selectedMeals[0].mealId' "${five_meals}")"
+rejected_meal_id="$(jq -r '.selectedMeals[1].mealId' "${five_meals}")"
+pin_reject_payload="$(jq -cn \
+  --arg pinned "${pinned_meal_id}" \
+  --arg rejected "${rejected_meal_id}" \
+  '{
+    templateId: "business-apero",
+    guestCount: 100,
+    budget: 10000,
+    servingsPerGuest: 4,
+    mealCount: 5,
+    dietaryShares: {vegetarian: 0.30, vegan: 0.20},
+    requiredMealIds: [$pinned],
+    excludedMealIds: [$rejected]
+  }')"
+pin_reject_plan="$(resolve_plan pin-reject "${pin_reject_payload}")"
+
+jq -e --arg pinned "${pinned_meal_id}" --arg rejected "${rejected_meal_id}" '
+  (.selectedMeals | length) as $selectedCount |
+  ($selectedCount >= 4 and $selectedCount <= 5) and
+  (any(.selectedMeals[]; .mealId == $pinned and .guaranteed == true)) and
+  (all(.selectedMeals[]; .mealId != $rejected)) and
+  (.event.requiredMealIds == [$pinned]) and
+  (.event.excludedMealIds == [$rejected]) and
+  ($selectedCount == 5 or any(.warnings[]; contains("Requested 5 distinct meals")))
+' "${pin_reject_plan}" >/dev/null || fail "pin/reject regeneration did not preserve pin/exclusion and fallback semantics"
+
+overlap_payload="$(jq -cn --arg meal "${pinned_meal_id}" '{
+  templateId: "business-apero",
+  guestCount: 20,
+  budget: 500,
+  requiredMealIds: [$meal],
+  excludedMealIds: [($meal | ascii_upcase)]
+}')"
+overlap_error="$(resolve_plan required-excluded-overlap "${overlap_payload}" 400)"
+jq -e --arg meal "${pinned_meal_id}" '
+  .title == "Invalid planning request" and
+  (.detail | contains("both required and excluded") and contains($meal))
+' "${overlap_error}" >/dev/null || fail "case-insensitive required/excluded overlap was not rejected clearly"
+
+unknown_exclusion="$(resolve_plan unknown-exclusion '{
+  "templateId": "business-apero",
+  "guestCount": 20,
+  "budget": 500,
+  "excludedMealIds": ["pipeline-test-meal-does-not-exist"]
+}' 422)"
+jq -e '
+  .title == "Plan cannot be resolved" and
+  .detail == "Unknown excluded meal IDs: pipeline-test-meal-does-not-exist"
+' "${unknown_exclusion}" >/dev/null || fail "unknown excluded meal ID was not rejected clearly"
+
 vegetarian_snack_servings="$(dietary_servings "${five_meals}" vegetarian)"
 vegan_snack_servings="$(dietary_servings "${five_meals}" vegan)"
 (( vegetarian_snack_servings >= 120 )) ||
@@ -204,5 +255,6 @@ echo "  - meal-like vegetarian servings: ${vegetarian_meal_servings}/100"
 echo "  - snack vegetarian servings: ${vegetarian_snack_servings}/400"
 echo "  - snack vegan servings: ${vegan_snack_servings}/400"
 echo "  - impossible dietary-share warning/failure behavior"
+echo "  - pin/reject regeneration, overlap validation, and unknown exclusion validation"
 echo "  - legacy request compatibility"
 echo "  - compatibility aliases and canonical precedence"

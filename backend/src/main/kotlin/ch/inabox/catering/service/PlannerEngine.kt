@@ -47,8 +47,10 @@ class PlannerEngine {
         val weights = resolveWeights(template.weights, request.weights)
         val dietaryShares = resolveDietaryShares(request)
         val desiredMealCount = resolveMealCount(template, request.mealCount)
+        val excludedMealIds = resolveExcludedMealIds(request.excludedMealIds, meals)
         val requiredMeals = resolveRequiredMeals(request.requiredMealIds, meals, constraints)
         val requiredMealsById = requiredMeals.associateBy { it.mealId }
+        val selectableMeals = meals.filterNot { normalizedMealId(it.mealId) in excludedMealIds }
         val warnings = mutableListOf<String>()
         val selectedMeals = mutableListOf<SelectedMeal>()
         val fulfilledRequirements = mutableListOf<FulfilledRequirement>()
@@ -59,7 +61,7 @@ class PlannerEngine {
         val selectionOutcome = if (enhancedMealPlanning) {
             selectEnhancedMeals(
                 template = template,
-                meals = meals,
+                meals = selectableMeals,
                 requiredMeals = requiredMeals,
                 desiredMealCount = desiredMealCount,
                 dietaryShares = dietaryShares,
@@ -73,7 +75,7 @@ class PlannerEngine {
         } else {
             selectLegacyMeals(
                 template = template,
-                meals = meals,
+                meals = selectableMeals,
                 requiredMeals = requiredMeals,
                 constraints = constraints,
                 preferences = preferences,
@@ -247,6 +249,7 @@ class PlannerEngine {
                 servingsPerGuest = request.servingsPerGuest,
                 mealCount = desiredMealCount,
                 dietaryShares = dietaryShares,
+                excludedMealIds = excludedMealIds,
                 requiredMealIds = requiredMealsById.keys.toSortedSet(),
                 selectedConstraints = selectedConstraints
                     .sortedWith(compareBy({ it.displayOrder }, { it.constraintId }))
@@ -295,6 +298,16 @@ class PlannerEngine {
         }
         if (request.requiredMealIds.any { it.isBlank() }) {
             throw IllegalArgumentException("Required meal IDs must not be blank")
+        }
+        if (request.excludedMealIds.any { it.isBlank() }) {
+            throw IllegalArgumentException("Excluded meal IDs must not be blank")
+        }
+        val mealIdOverlap = normalizedMealIds(request.requiredMealIds)
+            .intersect(normalizedMealIds(request.excludedMealIds))
+        if (mealIdOverlap.isNotEmpty()) {
+            throw IllegalArgumentException(
+                "Meal IDs cannot be both required and excluded: ${mealIdOverlap.sorted().joinToString()}",
+            )
         }
         val overlap = normalizeCapabilities(request.hardConstraints.requiredCapabilities)
             .intersect(normalizeCapabilities(request.hardConstraints.excludedCapabilities))
@@ -604,8 +617,8 @@ class PlannerEngine {
     ): List<Meal> {
         if (requestedIds.isEmpty()) return emptyList()
 
-        val mealsByNormalizedId = meals.associateBy { it.mealId.lowercase() }
-        val normalizedIds = requestedIds.map { it.trim().lowercase() }.toSortedSet()
+        val mealsByNormalizedId = meals.associateBy { normalizedMealId(it.mealId) }
+        val normalizedIds = normalizedMealIds(requestedIds)
         val missingIds = normalizedIds.filter { it !in mealsByNormalizedId }
         if (missingIds.isNotEmpty()) {
             throw PlanResolutionException("Unknown required meal IDs: ${missingIds.joinToString()}")
@@ -638,6 +651,23 @@ class PlannerEngine {
                 }
             }
     }
+
+    private fun resolveExcludedMealIds(requestedIds: Set<String>, meals: List<Meal>): Set<String> {
+        if (requestedIds.isEmpty()) return emptySet()
+
+        val normalizedIds = normalizedMealIds(requestedIds)
+        val catalogIds = meals.mapTo(mutableSetOf()) { normalizedMealId(it.mealId) }
+        val missingIds = normalizedIds.filter { it !in catalogIds }
+        if (missingIds.isNotEmpty()) {
+            throw PlanResolutionException("Unknown excluded meal IDs: ${missingIds.joinToString()}")
+        }
+        return normalizedIds
+    }
+
+    private fun normalizedMealIds(ids: Set<String>): Set<String> =
+        ids.mapTo(sortedSetOf(), ::normalizedMealId)
+
+    private fun normalizedMealId(id: String): String = id.trim().lowercase()
 
     private fun resolveWeights(defaults: Map<String, Double>, overrides: Map<String, Double>): Map<String, Double> {
         val merged = linkedMapOf<String, Double>()
