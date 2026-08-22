@@ -167,4 +167,10 @@ data class ResolvePlanRequest(
         requiredMode = Schema.RequiredMode.NOT_REQUIRED,
     )
     val capabilityShares: Map<String, Double> = emptyMap(),
+    @field:Schema(
+        description = "Meal IDs that must not appear in the generated menu, matched case-insensitively. Excluded meals are removed from the automatic candidate pool before scoring. A meal cannot be both required and excluded.",
+        example = "[\"falafel-bites\",\"mini-spinach-quiche\"]",
+        requiredMode = Schema.RequiredMode.NOT_REQUIRED,
+    )
+    val excludedMealIds: Set<String> = emptySet(),
 )

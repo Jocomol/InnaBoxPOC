@@ -5,6 +5,10 @@ const state = {
   mealCategories: [],
   mealCapabilities: [],
   requiredMeals: new Map(),
+  excludedMealIds: new Set(),
+  excludedMealNames: new Map(),
+  currentPlan: null,
+  planIsStale: false,
   pickerMeals: [],
   pickerCategory: '',
   pickerCapability: '',
@@ -46,6 +50,10 @@ const catalogCapability = document.querySelector('#catalog-capability');
 const catalogResults = document.querySelector('#catalog-results');
 const guestCountInput = document.querySelector('#guest-count');
 const mealCountInput = document.querySelector('#meal-count-input');
+const selectedMealsRoot = document.querySelector('#selected-meals');
+const regenerateMenuButton = document.querySelector('#regenerate-menu');
+const menuChangeStatus = document.querySelector('#menu-change-status');
+const excludedMealsRoot = document.querySelector('#excluded-meals');
 
 let pickerDebounce;
 let inventoryPickerDebounce;
@@ -68,9 +76,13 @@ pickerCapability.addEventListener('change', () => {
 document.querySelector('#back-to-form').addEventListener('click', () => {
   form.scrollIntoView({ behavior: 'smooth', block: 'start' });
 });
-templateSelect.addEventListener('change', applyTemplate);
+templateSelect.addEventListener('change', () => {
+  clearExcludedMeals();
+  applyTemplate();
+});
 guestCountInput.addEventListener('input', syncDietaryGuestLimits);
 form.addEventListener('submit', resolvePlan);
+regenerateMenuButton.addEventListener('click', () => form.requestSubmit());
 pickerSearch.addEventListener('input', () => {
   clearTimeout(pickerDebounce);
   pickerDebounce = setTimeout(searchPickerMeals, 180);
@@ -315,10 +327,21 @@ function renderPickerResults() {
     button.addEventListener('click', () => {
       const meal = state.pickerMeals.find(item => item.id === button.dataset.pickerMealId);
       if (!meal) return;
-      if (state.requiredMeals.has(meal.id)) state.requiredMeals.delete(meal.id);
-      else state.requiredMeals.set(meal.id, meal);
+      const wasSelected = state.requiredMeals.has(meal.id);
+      if (wasSelected) {
+        state.requiredMeals.delete(meal.id);
+      } else {
+        state.excludedMealIds.delete(meal.id);
+        state.excludedMealNames.delete(meal.id);
+        state.requiredMeals.set(meal.id, meal);
+      }
       renderRequiredMeals();
+      renderExcludedMeals();
       renderPickerResults();
+      renderCurrentMeals();
+      if (state.currentPlan) {
+        showMenuChange(`${meal.name} ${wasSelected ? 'unpinned and eligible' : 'pinned'} for the next generation.`);
+      }
     });
   });
 }
@@ -336,9 +359,14 @@ function updateRequiredMealActions() {
 }
 
 function clearRequiredMeals() {
+  const clearedCount = state.requiredMeals.size;
   state.requiredMeals.clear();
   renderRequiredMeals();
   renderPickerResults();
+  renderCurrentMeals();
+  if (state.currentPlan && clearedCount > 0) {
+    showMenuChange(`${clearedCount} pinned ${clearedCount === 1 ? 'dish is' : 'dishes are'} eligible again for the next generation.`);
+  }
 }
 
 function renderRequiredMeals() {
@@ -370,9 +398,14 @@ function renderRequiredMeals() {
 
   requiredMealsRoot.querySelectorAll('[data-remove-meal-id]').forEach(button => {
     button.addEventListener('click', () => {
+      const meal = state.requiredMeals.get(button.dataset.removeMealId);
       state.requiredMeals.delete(button.dataset.removeMealId);
       renderRequiredMeals();
       renderPickerResults();
+      renderCurrentMeals();
+      if (state.currentPlan && meal) {
+        showMenuChange(`${meal.name} unpinned and eligible for the next generation.`);
+      }
     });
   });
 }
@@ -577,6 +610,7 @@ async function resolvePlan(event) {
     mealCount: mealCountValue === '' ? null : Number(mealCountValue),
     dietaryShares: dietaryShares(),
     requiredMealIds: [...state.requiredMeals.keys()].sort(),
+    excludedMealIds: [...state.excludedMealIds].sort(),
     weights,
     preferences: {
       preferredCapabilities: document.querySelector('#prepare-ahead').checked ? ['prepare-ahead'] : []
@@ -596,7 +630,10 @@ async function resolvePlan(event) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(request)
     });
+    state.currentPlan = plan;
     renderPlan(plan);
+    clearMenuChangeStatus();
+    renderExcludedMeals();
     results.hidden = false;
     results.scrollIntoView({ behavior: 'smooth', block: 'start' });
   } catch (error) {
@@ -661,22 +698,35 @@ function renderMeals(meals, conflicts) {
     return map;
   }, new Map());
 
-  document.querySelector('#selected-meals').innerHTML = meals.map(meal => {
+  selectedMealsRoot.innerHTML = meals.map(meal => {
     const mealConflicts = conflictsByMeal.get(meal.mealId) || [];
+    const isPinned = state.requiredMeals.has(meal.mealId);
     const conflictText = mealConflicts.map(conflict => {
       const details = serverConflictDetails(conflict);
       return `${conflict.constraintLabel}${details ? ` — ${details}` : ''}`;
     }).join(' · ');
     return `
-      <article class="meal-card ${mealConflicts.length ? 'conflict' : ''}">
+      <article class="meal-card ${mealConflicts.length ? 'conflict' : ''} ${isPinned ? 'pinned' : ''}">
         <div class="meal-top">
           <div>
             <h4>${escapeHtml(meal.name)}</h4>
             <span class="requirement">${escapeHtml(humanize(meal.requirementId))}</span>
-            ${meal.guaranteed ? '<br><span class="guaranteed-badge">Guaranteed</span>' : ''}
+            ${isPinned ? '<br><span class="guaranteed-badge">Pinned</span>' : ''}
             ${mealConflicts.length ? '<span class="conflict-badge">Constraint exception</span>' : ''}
           </div>
           <span class="score" title="Weighted score">${Math.round(meal.finalWeightedScore * 100)}</span>
+        </div>
+        <div class="meal-actions" role="group" aria-label="Actions for ${escapeHtml(meal.name)}">
+          <button class="meal-pin" type="button" data-pin-meal-id="${escapeHtml(meal.mealId)}"
+            aria-pressed="${isPinned}" aria-label="${isPinned ? 'Unpin' : 'Pin'} ${escapeHtml(meal.name)}"
+            title="${isPinned ? 'Allow this dish to change next time' : 'Keep this dish in the next menu'}">
+            <span aria-hidden="true">📌</span><span class="meal-action-label">${isPinned ? 'Unpin' : 'Pin'}</span>
+          </button>
+          <button class="meal-reject" type="button" data-reject-meal-id="${escapeHtml(meal.mealId)}"
+            aria-label="Remove ${escapeHtml(meal.name)} from future generations"
+            title="Remove this dish and exclude it from the next menu">
+            <span aria-hidden="true">×</span><span class="meal-action-label">Remove</span>
+          </button>
         </div>
         ${mealConflicts.length ? `<div class="meal-conflict-box"><strong>Review before service:</strong> ${escapeHtml(conflictText)}</div>` : ''}
         <div class="chips">
@@ -693,6 +743,119 @@ function renderMeals(meals, conflicts) {
       </article>
     `;
   }).join('');
+
+  selectedMealsRoot.querySelectorAll('[data-pin-meal-id]').forEach(button => {
+    button.addEventListener('click', () => togglePinnedMeal(button.dataset.pinMealId));
+  });
+  selectedMealsRoot.querySelectorAll('[data-reject-meal-id]').forEach(button => {
+    button.addEventListener('click', () => rejectMeal(button.dataset.rejectMealId));
+  });
+}
+
+function renderCurrentMeals() {
+  if (!state.currentPlan) return;
+  renderMeals(state.currentPlan.selectedMeals || [], state.currentPlan.constraintConflicts || []);
+}
+
+function requiredMealMetadata(meal) {
+  return state.pickerMeals.find(item => item.id === meal.mealId)
+    || state.meals.find(item => item.id === meal.mealId)
+    || {
+      id: meal.mealId,
+      name: meal.name,
+      categoryIds: [],
+      capabilities: meal.matchedCapabilities || [],
+      dietaryCapabilities: meal.matchedDietaryCapabilities || []
+    };
+}
+
+function togglePinnedMeal(mealId) {
+  const meal = state.currentPlan?.selectedMeals?.find(item => item.mealId === mealId);
+  if (!meal) return;
+
+  const wasPinned = state.requiredMeals.has(mealId);
+  if (wasPinned) {
+    state.requiredMeals.delete(mealId);
+  } else {
+    state.excludedMealIds.delete(mealId);
+    state.excludedMealNames.delete(mealId);
+    state.requiredMeals.set(mealId, requiredMealMetadata(meal));
+  }
+
+  renderRequiredMeals();
+  renderPickerResults();
+  renderExcludedMeals();
+  renderCurrentMeals();
+  showMenuChange(`${meal.name} ${wasPinned ? 'unpinned and eligible' : 'pinned'} for the next generation.`);
+}
+
+function rejectMeal(mealId) {
+  const meal = state.currentPlan?.selectedMeals?.find(item => item.mealId === mealId);
+  if (!meal) return;
+
+  state.requiredMeals.delete(mealId);
+  state.excludedMealIds.add(mealId);
+  state.excludedMealNames.set(mealId, meal.name);
+  state.currentPlan.selectedMeals = state.currentPlan.selectedMeals.filter(item => item.mealId !== mealId);
+
+  renderRequiredMeals();
+  renderPickerResults();
+  renderExcludedMeals();
+  renderCurrentMeals();
+  showMenuChange(`${meal.name} removed from this menu and excluded from the next generation.`, true);
+}
+
+function renderExcludedMeals() {
+  const excluded = [...state.excludedMealIds]
+    .map(id => ({ id, name: state.excludedMealNames.get(id) || humanize(id) }))
+    .sort((left, right) => left.name.localeCompare(right.name));
+  excludedMealsRoot.hidden = excluded.length === 0;
+  if (!excluded.length) {
+    excludedMealsRoot.innerHTML = '';
+    return;
+  }
+
+  excludedMealsRoot.innerHTML = `
+    <strong>Excluded from next generation</strong>
+    <div class="excluded-meal-list">${excluded.map(meal => `
+      <span class="excluded-meal-chip">
+        ${escapeHtml(meal.name)}
+        <button type="button" data-undo-exclusion="${escapeHtml(meal.id)}" aria-label="Allow ${escapeHtml(meal.name)} in future generations">Undo</button>
+      </span>
+    `).join('')}</div>
+  `;
+
+  excludedMealsRoot.querySelectorAll('[data-undo-exclusion]').forEach(button => {
+    button.addEventListener('click', () => {
+      const mealId = button.dataset.undoExclusion;
+      const mealName = state.excludedMealNames.get(mealId) || humanize(mealId);
+      state.excludedMealIds.delete(mealId);
+      state.excludedMealNames.delete(mealId);
+      renderExcludedMeals();
+      showMenuChange(`${mealName} is eligible again for the next generation.`);
+    });
+  });
+}
+
+function clearExcludedMeals() {
+  state.excludedMealIds.clear();
+  state.excludedMealNames.clear();
+  renderExcludedMeals();
+}
+
+function showMenuChange(message, stale = false) {
+  if (stale) state.planIsStale = true;
+  menuChangeStatus.hidden = false;
+  menuChangeStatus.innerHTML = `
+    <strong>${escapeHtml(message)}</strong>
+    ${state.planIsStale ? '<span>Menu changed — regenerate to update quantities and costs.</span>' : '<span>Use Regenerate menu to apply this choice.</span>'}
+  `;
+}
+
+function clearMenuChangeStatus() {
+  state.planIsStale = false;
+  menuChangeStatus.hidden = true;
+  menuChangeStatus.innerHTML = '';
 }
 
 function renderShoppingItems(items) {
@@ -919,7 +1082,9 @@ async function fetchJson(url, options) {
 
 function setLoading(loading) {
   generateButton.disabled = loading;
+  regenerateMenuButton.disabled = loading;
   generateButton.querySelector('span').textContent = loading ? 'Resolving plan…' : 'Generate catering plan';
+  regenerateMenuButton.textContent = loading ? 'Regenerating…' : 'Regenerate menu';
 }
 
 function showError(message) { errorBox.textContent = message; errorBox.hidden = false; }

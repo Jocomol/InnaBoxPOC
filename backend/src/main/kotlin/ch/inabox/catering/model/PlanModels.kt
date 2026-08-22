@@ -53,6 +53,11 @@ data class EventSummary(
         example = "{\"vegetarian\":0.2,\"halal\":0.3}",
     )
     val dietaryShares: Map<String, Double> = emptyMap(),
+    @field:Schema(
+        description = "Normalized meal IDs excluded from automatic selection for this plan.",
+        example = "[\"falafel-bites\"]",
+    )
+    val excludedMealIds: Set<String> = emptySet(),
 )
 
 @Schema(description = "Meal selected for one template or guaranteed-meal requirement.")
