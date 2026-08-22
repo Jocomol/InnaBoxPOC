@@ -28,8 +28,8 @@ print(`Priorities:  ${priorityCount}`);
 print(`Constraints: ${constraintCount}`);
 print(`Categories:  ${categoryCount}`);
 
-if (templateCount !== 6 || mealCount !== 21 || productCount !== 20 || priorityCount !== 5 || constraintCount < 3 || categoryCount < 1) {
-  failSeed("Unexpected seed size; expected exactly 6 templates, 21 meals, 20 products, and 5 planning priorities, plus at least 3 dietary constraints and 1 meal category.");
+if (templateCount !== 6 || mealCount !== 22 || productCount !== 20 || priorityCount !== 5 || constraintCount < 4 || categoryCount < 1) {
+  failSeed("Unexpected seed size; expected exactly 6 templates, 22 meals, 20 products, and 5 planning priorities, plus at least 4 dietary constraints and 1 meal category.");
 }
 
 const definedPriorityIds = new Set(db.planningPriorities.find({}, { id: 1 }).toArray().map(priority => priority.id));
@@ -212,6 +212,23 @@ if (invalidHalalDocuments.length > 0) {
   failSeed(`Missing or incorrectly tagged halal seed documents: ${invalidHalalDocuments.join(", ")}`);
 }
 
+const glutenFreeMeal = db.meals.findOne({ id: "gluten-free-tomato-frittata" });
+if (!glutenFreeMeal || !(glutenFreeMeal.dietaryCapabilities || []).includes("gluten-free")) {
+  failSeed("Missing or incorrectly tagged gluten-free-tomato-frittata meal.");
+}
+if ((glutenFreeMeal.capabilities || []).includes("gluten-free")) {
+  failSeed("Gluten-free dietary capability leaked into gluten-free-tomato-frittata event capabilities.");
+}
+
+const glutenFreeIngredientProducts = ["mozzarella-1kg", "cherry-tomatoes-500g", "basil-100g", "eggs-30"];
+const invalidGlutenFreeProducts = glutenFreeIngredientProducts.filter(id => {
+  const product = db.products.findOne({ id });
+  return !product || !(product.dietaryCapabilities || []).includes("gluten-free");
+});
+if (invalidGlutenFreeProducts.length > 0) {
+  failSeed(`Missing or incorrectly tagged gluten-free ingredient products: ${invalidGlutenFreeProducts.join(", ")}`);
+}
+
 const missingWaterAlternatives = [];
 for (const id of ["mineral-water-6x15", "budget-water-12l"]) {
   const product = db.products.findOne({ id: id });
@@ -243,4 +260,4 @@ db.mealCategories.find({}, { id: 1, label: 1 }).sort({ displayOrder: 1 }).forEac
 });
 
 print("");
-print("All template defaults, event/dietary capability boundaries, requirements, ingredients, priority metadata, constraints, categories, Swiss scores, halal fixtures, and water alternatives are valid.");
+print("All template defaults, event/dietary capability boundaries, requirements, ingredients, priority metadata, constraints, categories, Swiss scores, dietary fixtures, and water alternatives are valid.");

@@ -105,6 +105,16 @@ const dietaryConstraints = [
     requiredCapabilities: ["halal"],
     excludedCapabilities: [],
     excludedConcepts: []
+  },
+  {
+    id: "gluten-free",
+    label: "Gluten-free",
+    description: "Allocate enough gluten-free-compatible servings for the entered guest count.",
+    displayOrder: 40,
+    dietaryCapability: "gluten-free",
+    requiredCapabilities: ["gluten-free"],
+    excludedCapabilities: [],
+    excludedConcepts: []
   }
 ];
 
@@ -603,6 +613,20 @@ const meals = [
       { concept: "apple", amountPerServing: 90, unit: "g" }
     ],
     scores: { price: 0.84, swiss: 1.00, presentation: 0.86, prepEase: 0.78, sustainability: 0.88 }
+  },
+  {
+    id: "gluten-free-tomato-frittata",
+    categoryIds: ["breakfast", "plant-based", "lunch"],
+    name: "Gluten-Free Tomato Frittata",
+    capabilities: ["vegetarian", "gluten-free", "savory", "warm", "brunch", "breakfast", "lunch", "buffet"],
+    serving: { piecesPerServing: 1 },
+    ingredients: [
+      { concept: "egg", amountPerServing: 2, unit: "piece" },
+      { concept: "mozzarella", amountPerServing: 35, unit: "g" },
+      { concept: "cherry-tomato", amountPerServing: 70, unit: "g" },
+      { concept: "basil", amountPerServing: 3, unit: "g" }
+    ],
+    scores: { price: 0.74, swiss: 1.00, presentation: 0.84, prepEase: 0.68, sustainability: 0.78 }
   }
 ];
 
@@ -610,17 +634,17 @@ const products = [
   {
     id: "mozzarella-1kg", sku: "MOCK-001", name: "Swiss Mozzarella 1 kg", concept: "mozzarella", originCountry: "CH",
     package: { amount: 1000, unit: "g" }, price: { amount: 9.80, currency: "CHF" },
-    capabilities: ["vegetarian"], scores: { price: 0.80, swiss: 1.00, sustainability: 0.70 }
+    capabilities: ["vegetarian", "gluten-free"], scores: { price: 0.80, swiss: 1.00, sustainability: 0.70 }
   },
   {
     id: "cherry-tomatoes-500g", sku: "MOCK-002", name: "Swiss Cherry Tomatoes 500 g", concept: "cherry-tomato", originCountry: "CH",
     package: { amount: 500, unit: "g" }, price: { amount: 4.20, currency: "CHF" },
-    capabilities: ["vegetarian", "vegan", "halal"], scores: { price: 0.75, swiss: 1.00, sustainability: 0.80 }
+    capabilities: ["vegetarian", "vegan", "halal", "gluten-free"], scores: { price: 0.75, swiss: 1.00, sustainability: 0.80 }
   },
   {
     id: "basil-100g", sku: "MOCK-003", name: "Swiss Fresh Basil 100 g", concept: "basil", originCountry: "CH",
     package: { amount: 100, unit: "g" }, price: { amount: 3.90, currency: "CHF" },
-    capabilities: ["vegetarian", "vegan", "halal"], scores: { price: 0.60, swiss: 1.00, sustainability: 0.75 }
+    capabilities: ["vegetarian", "vegan", "halal", "gluten-free"], scores: { price: 0.60, swiss: 1.00, sustainability: 0.75 }
   },
   {
     id: "spinach-quiche-20", sku: "MOCK-004", name: "Swiss Mini Spinach Quiche 20 pcs", concept: "mini-spinach-quiche", originCountry: "CH",
@@ -660,7 +684,7 @@ const products = [
   {
     id: "eggs-30", sku: "MOCK-011", name: "Swiss Eggs 30 pcs", concept: "egg", originCountry: "CH",
     package: { amount: 30, unit: "piece" }, price: { amount: 13.90, currency: "CHF" },
-    capabilities: ["vegetarian"], scores: { price: 0.85, swiss: 1.00, sustainability: 0.75 }
+    capabilities: ["vegetarian", "gluten-free"], scores: { price: 0.85, swiss: 1.00, sustainability: 0.75 }
   },
   {
     id: "butter-1kg", sku: "MOCK-012", name: "Swiss Butter 1 kg", concept: "butter", originCountry: "CH",
