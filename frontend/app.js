@@ -3,9 +3,11 @@ const state = {
   priorities: [],
   constraints: [],
   mealCategories: [],
+  mealCapabilities: [],
   requiredMeals: new Map(),
   pickerMeals: [],
   pickerCategory: '',
+  pickerCapability: '',
   pickerSearchToken: 0,
   catalogType: 'meals',
   catalogLoaded: false,
@@ -26,6 +28,10 @@ const mealPicker = document.querySelector('#meal-picker');
 const pickerSearch = document.querySelector('#meal-picker-search');
 const pickerCategories = document.querySelector('#meal-picker-categories');
 const pickerResults = document.querySelector('#meal-picker-results');
+const pickerCapability = document.querySelector('#meal-picker-capability');
+const clearConstraintsButton = document.querySelector('#clear-constraints');
+const clearRequiredMealsButton = document.querySelector('#clear-required-meals');
+const pickerClearSelectedButton = document.querySelector('#meal-picker-clear-selected');
 const pickerStatus = document.querySelector('#meal-picker-status');
 const developerTools = document.querySelector('#developer-tools');
 const catalogSearch = document.querySelector('#catalog-search');
@@ -37,6 +43,14 @@ let pickerDebounce;
 document.querySelector('#add-inventory').addEventListener('click', () => addInventoryRow());
 document.querySelector('#open-meal-picker').addEventListener('click', openMealPicker);
 document.querySelector('#close-meal-picker').addEventListener('click', closeMealPicker);
+document.querySelector('#meal-picker-done').addEventListener('click', closeMealPicker);
+clearConstraintsButton.addEventListener('click', clearConstraints);
+clearRequiredMealsButton.addEventListener('click', clearRequiredMeals);
+pickerClearSelectedButton.addEventListener('click', clearRequiredMeals);
+pickerCapability.addEventListener('change', () => {
+  state.pickerCapability = pickerCapability.value;
+  searchPickerMeals();
+});
 document.querySelector('#back-to-form').addEventListener('click', () => {
   form.scrollIntoView({ behavior: 'smooth', block: 'start' });
 });
@@ -79,11 +93,12 @@ shareInput.addEventListener('input', () => {
 
 async function loadPlannerData() {
   try {
-    [state.templates, state.priorities, state.constraints, state.mealCategories] = await Promise.all([
+    [state.templates, state.priorities, state.constraints, state.mealCategories, state.mealCapabilities] = await Promise.all([
       fetchJson('/api/templates'),
       fetchJson('/api/priorities'),
       fetchJson('/api/dietary-constraints'),
-      fetchJson('/api/meal-categories')
+      fetchJson('/api/meal-categories'),
+      fetchJson('/api/meal-capabilities')
     ]);
 
     templateSelect.innerHTML = state.templates
@@ -95,6 +110,7 @@ async function loadPlannerData() {
 
     renderDietaryConstraints();
     renderMealCategories();
+    renderMealCapabilities();
     renderRequiredMeals();
     applyTemplate();
     renderInventoryEmptyState();
@@ -105,7 +121,8 @@ async function loadPlannerData() {
 
 function renderDietaryConstraints() {
   if (!state.constraints.length) {
-    constraintRoot.innerHTML = '<p class="empty-row">No dietary constraints are configured.</p>';
+    constraintRoot.innerHTML = '<p class="empty-row">No dietary constraints are available from the catalog.</p>';
+    updateConstraintActions();
     return;
   }
 
@@ -124,10 +141,27 @@ function renderDietaryConstraints() {
 
   constraintRoot.querySelectorAll('input[data-constraint-id]').forEach(input => {
     input.addEventListener('change', () => {
+      updateConstraintActions();
       renderRequiredMeals();
       renderPickerResults();
     });
   });
+  updateConstraintActions();
+}
+
+function updateConstraintActions() {
+  const count = selectedConstraintIds().size;
+  clearConstraintsButton.hidden = count === 0;
+  clearConstraintsButton.textContent = count ? `Clear ${count} selected` : 'Clear selected';
+}
+
+function clearConstraints() {
+  constraintRoot.querySelectorAll('input[data-constraint-id]:checked').forEach(input => {
+    input.checked = false;
+  });
+  updateConstraintActions();
+  renderRequiredMeals();
+  renderPickerResults();
 }
 
 function selectedConstraintIds() {
@@ -137,6 +171,15 @@ function selectedConstraintIds() {
 function selectedConstraintDefinitions() {
   const ids = selectedConstraintIds();
   return state.constraints.filter(constraint => ids.has(constraint.id));
+}
+
+function renderMealCapabilities() {
+  const capabilities = state.mealCapabilities || [];
+  pickerCapability.innerHTML = [
+    '<option value="">All food types</option>',
+    ...capabilities.map(capability => `<option value="${escapeHtml(capability)}">${escapeHtml(humanize(capability))}</option>`)
+  ].join('');
+  pickerCapability.value = state.pickerCapability;
 }
 
 function renderMealCategories() {
@@ -176,13 +219,18 @@ async function searchPickerMeals() {
   const query = pickerSearch.value.trim();
   if (query) params.set('query', query);
   if (state.pickerCategory) params.set('categoryId', state.pickerCategory);
+  if (state.pickerCapability) params.set('capability', state.pickerCapability);
 
   pickerStatus.textContent = 'Searching recipes…';
   try {
     const meals = await fetchJson(`/api/meals/search?${params.toString()}`);
     if (token !== state.pickerSearchToken) return;
     state.pickerMeals = meals;
-    const filterText = [query && `matching “${query}”`, state.pickerCategory && categoryLabel(state.pickerCategory)].filter(Boolean).join(' · ');
+    const filterText = [
+      query && `matching “${query}”`,
+      state.pickerCategory && categoryLabel(state.pickerCategory),
+      state.pickerCapability && humanize(state.pickerCapability)
+    ].filter(Boolean).join(' · ');
     pickerStatus.textContent = `${meals.length} recipe${meals.length === 1 ? '' : 's'}${filterText ? ` · ${filterText}` : ''}`;
     renderPickerResults();
   } catch (error) {
@@ -212,8 +260,8 @@ function renderPickerResults() {
           </div>
           ${conflicts.length ? `<p class="picker-conflict">⚠ ${escapeHtml(conflictSummary(conflicts))}</p>` : ''}
         </div>
-        <button class="picker-add ${isSelected ? 'added' : ''}" type="button" data-picker-meal-id="${escapeHtml(meal.id)}" ${isSelected ? 'disabled' : ''}>
-          ${isSelected ? 'Added' : 'Add'}
+        <button class="picker-add ${isSelected ? 'remove' : ''}" type="button" data-picker-meal-id="${escapeHtml(meal.id)}" aria-pressed="${isSelected}">
+          ${isSelected ? 'Remove' : '+ Add dish'}
         </button>
       </article>
     `;
@@ -223,7 +271,8 @@ function renderPickerResults() {
     button.addEventListener('click', () => {
       const meal = state.pickerMeals.find(item => item.id === button.dataset.pickerMealId);
       if (!meal) return;
-      state.requiredMeals.set(meal.id, meal);
+      if (state.requiredMeals.has(meal.id)) state.requiredMeals.delete(meal.id);
+      else state.requiredMeals.set(meal.id, meal);
       renderRequiredMeals();
       renderPickerResults();
     });
@@ -235,10 +284,24 @@ function selectedCountText() {
   return `${count} selected`;
 }
 
+function updateRequiredMealActions() {
+  const hasMeals = state.requiredMeals.size > 0;
+  clearRequiredMealsButton.hidden = !hasMeals;
+  pickerClearSelectedButton.hidden = !hasMeals;
+  document.querySelector('#meal-picker-selected-count').textContent = selectedCountText();
+}
+
+function clearRequiredMeals() {
+  state.requiredMeals.clear();
+  renderRequiredMeals();
+  renderPickerResults();
+}
+
 function renderRequiredMeals() {
   const meals = [...state.requiredMeals.values()].sort((a, b) => a.name.localeCompare(b.name));
   if (!meals.length) {
     requiredMealsRoot.innerHTML = '<p class="empty-selection">No specific dishes selected.</p>';
+    updateRequiredMealActions();
     return;
   }
 
@@ -254,10 +317,12 @@ function renderRequiredMeals() {
           </div>
           ${conflicts.length ? `<p class="selected-meal-warning">⚠ Constraint exception: ${escapeHtml(conflictSummary(conflicts))}. This dish will still be included.</p>` : ''}
         </div>
-        <button class="remove-meal" type="button" data-remove-meal-id="${escapeHtml(meal.id)}" aria-label="Remove ${escapeHtml(meal.name)}">×</button>
+        <button class="remove-meal" type="button" data-remove-meal-id="${escapeHtml(meal.id)}" aria-label="Remove ${escapeHtml(meal.name)}"><span aria-hidden="true">×</span> Remove</button>
       </div>
     `;
   }).join('');
+
+  updateRequiredMealActions();
 
   requiredMealsRoot.querySelectorAll('[data-remove-meal-id]').forEach(button => {
     button.addEventListener('click', () => {
@@ -369,7 +434,7 @@ function addInventoryRow(item = { concept: '', amount: '', unit: 'piece' }) {
         ).join('')}
       </select>
     </label>
-    <button class="remove-inventory" type="button" aria-label="Remove inventory item">×</button>
+    <button class="remove-inventory" type="button" aria-label="Remove inventory item"><span aria-hidden="true">×</span> Remove</button>
   `;
   row.querySelector('.remove-inventory').addEventListener('click', () => {
     row.remove();

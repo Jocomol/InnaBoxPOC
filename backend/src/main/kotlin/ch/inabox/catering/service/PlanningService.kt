@@ -3,7 +3,6 @@ package ch.inabox.catering.service
 import ch.inabox.catering.model.HardConstraints
 import ch.inabox.catering.model.ResolvePlanRequest
 import ch.inabox.catering.model.ShoppingPlan
-import ch.inabox.catering.repository.DietaryConstraintRepository
 import ch.inabox.catering.repository.EventTemplateRepository
 import ch.inabox.catering.repository.MealRepository
 import ch.inabox.catering.repository.PlanningPriorityRepository
@@ -16,7 +15,7 @@ class PlanningService(
     private val mealRepository: MealRepository,
     private val productRepository: ProductRepository,
     private val planningPriorityRepository: PlanningPriorityRepository,
-    private val dietaryConstraintRepository: DietaryConstraintRepository,
+    private val catalogMetadataService: CatalogMetadataService,
     private val plannerEngine: PlannerEngine,
 ) {
     fun resolve(request: ResolvePlanRequest): ShoppingPlan {
@@ -34,7 +33,7 @@ class PlanningService(
             .associateTo(linkedMapOf()) { it.priorityId to it.defaultWeight }
         val effectiveTemplate = template.copy(weights = databaseDefaults + template.weights)
 
-        val constraintDefinitions = dietaryConstraintRepository.findAll()
+        val constraintDefinitions = catalogMetadataService.dietaryConstraints()
         val constraintsById = constraintDefinitions.associateBy { it.constraintId.lowercase() }
         val requestedConstraintIds = request.selectedConstraintIds
             .map { it.trim().lowercase() }

@@ -54,12 +54,13 @@
       </section>
 
       <section class="panel constraint-panel" aria-labelledby="constraints-heading">
-        <div class="section-heading">
+        <div class="section-heading action-heading">
           <span>02</span>
           <div>
             <h2 id="constraints-heading">Dietary constraints</h2>
             <p>Choose every rule that the automatically generated menu must follow.</p>
           </div>
+          <button id="clear-constraints" class="tertiary-button" type="button" hidden>Clear selected</button>
         </div>
         <div id="dietary-constraints" class="constraint-grid" aria-live="polite">
           <p class="empty-row">Loading dietary constraints…</p>
@@ -74,7 +75,10 @@
             <h2 id="guaranteed-heading">Specific dishes</h2>
             <p>Optional. Add recipes that must appear in the final menu.</p>
           </div>
-          <button id="open-meal-picker" class="secondary-button" type="button">+ Choose dishes</button>
+          <div class="heading-actions">
+            <button id="clear-required-meals" class="tertiary-button" type="button" hidden>Clear selected</button>
+            <button id="open-meal-picker" class="secondary-button" type="button">+ Choose dishes</button>
+          </div>
         </div>
         <div id="required-meals" class="selected-meals-list" aria-live="polite">
           <p class="empty-selection">No specific dishes selected.</p>
@@ -236,12 +240,27 @@
         </label>
       </div>
 
-      <div id="meal-picker-categories" class="picker-categories" aria-label="Meal categories"></div>
+      <div class="picker-filter-area">
+        <div>
+          <span class="picker-filter-label">Browse categories</span>
+          <div id="meal-picker-categories" class="picker-categories" aria-label="Meal categories"></div>
+        </div>
+        <label class="field picker-capability-field">
+          <span>Food type</span>
+          <select id="meal-picker-capability">
+            <option value="">All food types</option>
+          </select>
+        </label>
+      </div>
       <div class="picker-status-row">
         <p id="meal-picker-status">Loading recipes…</p>
         <span id="meal-picker-selected-count">0 selected</span>
       </div>
       <div id="meal-picker-results" class="picker-results"></div>
+      <div class="picker-footer">
+        <button id="meal-picker-clear-selected" class="tertiary-button" type="button" hidden>Clear selected</button>
+        <button id="meal-picker-done" class="primary-small-button" type="button">Done</button>
+      </div>
     </div>
   </dialog>
 
