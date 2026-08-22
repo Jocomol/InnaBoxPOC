@@ -10,7 +10,12 @@ data class Quantity(
     val unit: String,
 )
 
-@Schema(description = "Resolved request context and the effective planning inputs.")
+data class AppliedDietaryConstraint(
+    val id: String,
+    val label: String,
+    val description: String,
+)
+
 data class EventSummary(
     @field:Schema(example = "business-apero")
     val templateId: String,
@@ -22,6 +27,7 @@ data class EventSummary(
     val servingsPerGuest: Int?,
     @field:Schema(description = "Guaranteed meal IDs from the request.", example = "[\"mini-spinach-quiche\"]")
     val requiredMealIds: Set<String>,
+    val selectedConstraints: List<AppliedDietaryConstraint>,
     val budget: Money,
     @field:Schema(
         description = "Final merged and normalized weights used to score candidates.",
@@ -30,6 +36,8 @@ data class EventSummary(
     val appliedWeights: Map<String, Double>,
     val preferences: CustomerPreferences,
     val hardConstraints: HardConstraints,
+    val mealCount: Int? = null,
+    val dietaryShares: Map<String, Double> = emptyMap(),
 )
 
 @Schema(description = "Meal selected for one template or guaranteed-meal requirement.")
@@ -51,6 +59,19 @@ data class SelectedMeal(
     val scoreComponents: Map<String, Double>,
     @field:Schema(description = "Normalized weighted score used to rank valid candidates.", example = "0.7625", minimum = "0", maximum = "1")
     val finalWeightedScore: Double,
+    val guaranteed: Boolean = false,
+    val matchedDietaryCapabilities: Set<String> = emptySet(),
+)
+
+data class ConstraintConflict(
+    val mealId: String,
+    val mealName: String,
+    val constraintId: String,
+    val constraintLabel: String,
+    val guaranteed: Boolean,
+    val missingRequiredCapabilities: Set<String> = emptySet(),
+    val excludedCapabilities: Set<String> = emptySet(),
+    val excludedConcepts: Set<String> = emptySet(),
 )
 
 @Schema(description = "Trace record explaining whether and how a template requirement was fulfilled.")
@@ -133,6 +154,7 @@ data class PlanTotals(
 data class ShoppingPlan(
     val event: EventSummary,
     val selectedMeals: List<SelectedMeal>,
+    val constraintConflicts: List<ConstraintConflict>,
     val fulfilledRequirements: List<FulfilledRequirement>,
     val ingredientRequirements: List<IngredientRequirement>,
     val shoppingItems: List<ShoppingItem>,

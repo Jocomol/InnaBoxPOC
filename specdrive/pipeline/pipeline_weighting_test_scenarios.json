@@ -1,0 +1,219 @@
+{
+  "dataset": "seed_weighting_enriched.js",
+  "notes": [
+    "Expected dietary shares are minimum shares of allocated servings, not exact shares.",
+    "Dietary shares may overlap. A serving from a meal tagged both vegetarian and halal counts toward both targets.",
+    "For weighting isolation scenarios, every planning-priority key is sent so template/database defaults cannot influence the result.",
+    "Exact total cost is not asserted in the weighting scenarios because package rounding and unrelated template product requirements can legitimately affect it."
+  ],
+  "scenarios": [
+    {
+      "id": "lunch-10-guests-mixed-dietary",
+      "purpose": "Realistic meal-like allocation: 10 lunch guests, 2 vegetarian and 3 halal/Muslim guests.",
+      "request": {
+        "templateId": "team-lunch-buffet",
+        "guestCount": 10,
+        "budget": 500.0,
+        "servingsPerGuest": 1,
+        "mealCount": 3,
+        "dietaryShares": {
+          "vegetarian": 0.20,
+          "halal": 0.30
+        }
+      },
+      "expect": {
+        "status": 200,
+        "selectedMealCount": 3,
+        "totalMealServings": 10,
+        "minimumDietaryServings": {
+          "vegetarian": 2,
+          "halal": 3
+        },
+        "allAutomaticallySelectedMealsMustMatchAtLeastOneTemplateMealRequirement": true,
+        "requiredMealCapabilitiesForThisTemplate": ["savory", "lunch", "buffet"],
+        "noDietaryShortfallWarning": true
+      }
+    },
+    {
+      "id": "apero-price-only",
+      "purpose": "Verify meal weighting can be isolated to affordability.",
+      "request": {
+        "templateId": "business-apero",
+        "guestCount": 20,
+        "budget": 1000.0,
+        "servingsPerGuest": 4,
+        "mealCount": 1,
+        "weights": {
+          "price": 1.0,
+          "swiss": 0.0,
+          "presentation": 0.0,
+          "prepEase": 0.0,
+          "sustainability": 0.0
+        }
+      },
+      "expect": {
+        "status": 200,
+        "selectedMealIds": ["falafel-bites"],
+        "totalMealServings": 80,
+        "selectedMealFinalWeightedScore": 0.85
+      }
+    },
+    {
+      "id": "apero-presentation-only",
+      "purpose": "Verify presentation weight changes meal selection.",
+      "request": {
+        "templateId": "business-apero",
+        "guestCount": 20,
+        "budget": 1000.0,
+        "servingsPerGuest": 4,
+        "mealCount": 1,
+        "weights": {
+          "price": 0.0,
+          "swiss": 0.0,
+          "presentation": 1.0,
+          "prepEase": 0.0,
+          "sustainability": 0.0
+        }
+      },
+      "expect": {
+        "status": 200,
+        "selectedMealIds": ["caprese-skewers"],
+        "selectedMealFinalWeightedScore": 0.90
+      }
+    },
+    {
+      "id": "apero-sustainability-only",
+      "purpose": "Verify sustainability weight changes meal selection.",
+      "request": {
+        "templateId": "business-apero",
+        "guestCount": 20,
+        "budget": 1000.0,
+        "servingsPerGuest": 4,
+        "mealCount": 1,
+        "weights": {
+          "price": 0.0,
+          "swiss": 0.0,
+          "presentation": 0.0,
+          "prepEase": 0.0,
+          "sustainability": 1.0
+        }
+      },
+      "expect": {
+        "status": 200,
+        "selectedMealIds": ["falafel-bites"],
+        "selectedMealFinalWeightedScore": 0.90
+      }
+    },
+    {
+      "id": "apero-normalized-mixed-weights",
+      "purpose": "Verify request weights are normalized and a balanced candidate can win.",
+      "request": {
+        "templateId": "business-apero",
+        "guestCount": 20,
+        "budget": 1000.0,
+        "servingsPerGuest": 4,
+        "mealCount": 1,
+        "weights": {
+          "price": 0.15,
+          "swiss": 0.0,
+          "presentation": 0.35,
+          "prepEase": 0.0,
+          "sustainability": 0.0
+        }
+      },
+      "expect": {
+        "status": 200,
+        "appliedWeights": {
+          "price": 0.30,
+          "swiss": 0.0,
+          "presentation": 0.70,
+          "prepEase": 0.0,
+          "sustainability": 0.0
+        },
+        "selectedMealIds": ["halal-chicken-skewers"],
+        "selectedMealFinalWeightedScore": 0.832
+      }
+    },
+    {
+      "id": "halal-share-beats-swiss-preference",
+      "purpose": "Verify a required dietary share takes precedence over a conflicting scoring priority.",
+      "request": {
+        "templateId": "business-apero",
+        "guestCount": 10,
+        "budget": 1000.0,
+        "servingsPerGuest": 1,
+        "mealCount": 1,
+        "dietaryShares": {
+          "halal": 1.0
+        },
+        "weights": {
+          "price": 0.0,
+          "swiss": 1.0,
+          "presentation": 0.0,
+          "prepEase": 0.0,
+          "sustainability": 0.0
+        }
+      },
+      "expect": {
+        "status": 200,
+        "selectedMealIds": ["falafel-bites"],
+        "totalMealServings": 10,
+        "minimumDietaryServings": {
+          "halal": 10
+        },
+        "selectedMealMayHaveLowerSwissScoreThanRejectedCandidates": true,
+        "noDietaryShortfallWarning": true
+      }
+    },
+    {
+      "id": "water-price-priority",
+      "purpose": "Verify weighting also affects direct product selection when multiple products satisfy the same requirement.",
+      "request": {
+        "templateId": "coffee-break",
+        "guestCount": 20,
+        "budget": 1000.0,
+        "servingsPerGuest": 2,
+        "mealCount": 2,
+        "weights": {
+          "price": 1.0,
+          "swiss": 0.0,
+          "presentation": 0.0,
+          "prepEase": 0.0,
+          "sustainability": 0.0
+        }
+      },
+      "expect": {
+        "status": 200,
+        "productForRequirement": {
+          "requirementId": "water",
+          "productId": "budget-water-12l"
+        }
+      }
+    },
+    {
+      "id": "water-swiss-priority",
+      "purpose": "Verify Swiss-origin priority can reverse the direct product decision.",
+      "request": {
+        "templateId": "coffee-break",
+        "guestCount": 20,
+        "budget": 1000.0,
+        "servingsPerGuest": 2,
+        "mealCount": 2,
+        "weights": {
+          "price": 0.0,
+          "swiss": 1.0,
+          "presentation": 0.0,
+          "prepEase": 0.0,
+          "sustainability": 0.0
+        }
+      },
+      "expect": {
+        "status": 200,
+        "productForRequirement": {
+          "requirementId": "water",
+          "productId": "mineral-water-6x15"
+        }
+      }
+    }
+  ]
+}

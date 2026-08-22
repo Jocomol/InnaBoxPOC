@@ -1,5 +1,10 @@
 db = db.getSiblingDB("catering");
 
+function failSeed(message) {
+  print(`SEED CHECK FAILED: ${message}`);
+  quit(1);
+}
+
 const expectedTemplateIds = [
   "business-apero",
   "brunch",
@@ -9,18 +14,31 @@ const expectedTemplateIds = [
   "swiss-breakfast"
 ];
 
+const expectedDietaryConstraintIds = [
+  "vegetarian",
+  "vegan",
+  "halal",
+  "gluten-free",
+  "lactose-free",
+  "nut-free"
+];
+
 const templateCount = db.eventTemplates.countDocuments();
 const mealCount = db.meals.countDocuments();
 const productCount = db.products.countDocuments();
 const priorityCount = db.planningPriorities.countDocuments();
+const constraintCount = db.dietaryConstraints.countDocuments();
+const categoryCount = db.mealCategories.countDocuments();
 
-print(`Templates: ${templateCount}`);
-print(`Meals:     ${mealCount}`);
-print(`Products:  ${productCount}`);
-print(`Priorities:${priorityCount.toString().padStart(3, " ")}`);
+print(`Templates:   ${templateCount}`);
+print(`Meals:       ${mealCount}`);
+print(`Products:    ${productCount}`);
+print(`Priorities:  ${priorityCount}`);
+print(`Constraints: ${constraintCount}`);
+print(`Categories:  ${categoryCount}`);
 
-if (templateCount < 6 || mealCount < 19 || productCount < 17 || priorityCount < 5) {
-  throw new Error("Seed catalog is incomplete; expected at least 6 templates, 19 meals, 17 products, and 5 planning priorities.");
+if (templateCount !== 6 || mealCount !== 27 || productCount !== 30 || priorityCount !== 5 || constraintCount !== 6 || categoryCount !== 7) {
+  failSeed("Unexpected seed size; expected exactly 6 templates, 27 meals, 30 products, 5 planning priorities, 6 dietary constraints, and 7 meal categories.");
 }
 
 const definedPriorityIds = new Set(db.planningPriorities.find({}, { id: 1 }).toArray().map(priority => priority.id));
@@ -41,12 +59,108 @@ db.eventTemplates.find().forEach(template => {
 });
 
 if (undefinedPriorityReferences.length > 0) {
-  throw new Error(`Score or weight keys without planning-priority metadata: ${undefinedPriorityReferences.join(", ")}`);
+  failSeed(`Score or weight keys without planning-priority metadata: ${undefinedPriorityReferences.join(", ")}`);
+}
+
+const definedCategoryIds = new Set(db.mealCategories.find({}, { id: 1 }).toArray().map(category => category.id));
+const undefinedCategoryReferences = [];
+db.meals.find().forEach(meal => {
+  (meal.categoryIds || []).forEach(categoryId => {
+    if (!definedCategoryIds.has(categoryId)) undefinedCategoryReferences.push(`meals/${meal.id}/${categoryId}`);
+  });
+});
+if (undefinedCategoryReferences.length > 0) {
+  throw new Error(`Meal category IDs without category metadata: ${undefinedCategoryReferences.join(", ")}`);
+}
+
+const invalidConstraints = [];
+db.dietaryConstraints.find().forEach(constraint => {
+  const dietaryCapability = (constraint.dietaryCapability || "").trim();
+  const ruleCount = (constraint.requiredCapabilities || []).length +
+    (constraint.excludedCapabilities || []).length +
+    (constraint.excludedConcepts || []).length;
+  if (!constraint.id || !constraint.label || !dietaryCapability || ruleCount === 0) {
+    invalidConstraints.push(constraint.id || "<missing-id>");
+  }
+  if (dietaryCapability && !db.meals.findOne({ dietaryCapabilities: dietaryCapability })) {
+    invalidConstraints.push(`${constraint.id || "<missing-id>"}/missing-meal-tag:${dietaryCapability}`);
+  }
+});
+if (invalidConstraints.length > 0) {
+  throw new Error(`Dietary constraints without usable metadata/rules: ${invalidConstraints.join(", ")}`);
+}
+
+const missingDietaryConstraints = expectedDietaryConstraintIds.filter(id => !db.dietaryConstraints.findOne({ id }));
+if (missingDietaryConstraints.length > 0) {
+  failSeed(`Missing dietary constraints: ${missingDietaryConstraints.join(", ")}`);
 }
 
 const missingTemplates = expectedTemplateIds.filter(id => !db.eventTemplates.findOne({ id }));
 if (missingTemplates.length > 0) {
-  throw new Error(`Missing templates: ${missingTemplates.join(", ")}`);
+  failSeed(`Missing templates: ${missingTemplates.join(", ")}`);
+}
+
+const invalidTemplateDefaults = [];
+const templateDietaryShares = [];
+db.eventTemplates.find().forEach(template => {
+  const configuredMealCount = template.defaults?.mealCount;
+  if (!Number.isInteger(configuredMealCount) || configuredMealCount <= 0) {
+    invalidTemplateDefaults.push(`${template.id}=${configuredMealCount}`);
+  }
+  if (Object.prototype.hasOwnProperty.call(template.defaults || {}, "vegetarianShare")) {
+    templateDietaryShares.push(`${template.id}/defaults.vegetarianShare`);
+  }
+  (template.requirements || []).forEach(requirement => {
+    if (requirement.target?.share !== undefined && requirement.target?.share !== null) {
+      templateDietaryShares.push(`${template.id}/${requirement.id}/target.share`);
+    }
+  });
+});
+
+if (invalidTemplateDefaults.length > 0) {
+  failSeed(`Templates with invalid defaults.mealCount: ${invalidTemplateDefaults.join(", ")}`);
+}
+
+if (templateDietaryShares.length > 0) {
+  failSeed(`Dietary shares must not be stored in templates: ${templateDietaryShares.join(", ")}`);
+}
+
+const dietaryCapabilityNames = new Set(
+  db.dietaryConstraints.find({}, { dietaryCapability: 1 }).toArray().map(constraint => constraint.dietaryCapability)
+);
+const mixedCatalogCapabilities = [];
+const unknownDietaryCapabilities = [];
+["meals", "products"].forEach(collectionName => {
+  db.getCollection(collectionName).find().forEach(document => {
+    if (!Array.isArray(document.dietaryCapabilities)) {
+      mixedCatalogCapabilities.push(`${collectionName}/${document.id}/missing-dietaryCapabilities`);
+    }
+    (document.capabilities || []).forEach(capability => {
+      if (dietaryCapabilityNames.has(capability)) {
+        mixedCatalogCapabilities.push(`${collectionName}/${document.id}/capabilities.${capability}`);
+      }
+    });
+    (document.dietaryCapabilities || []).forEach(capability => {
+      if (!dietaryCapabilityNames.has(capability)) {
+        unknownDietaryCapabilities.push(`${collectionName}/${document.id}/dietaryCapabilities.${capability}`);
+      }
+    });
+  });
+});
+db.eventTemplates.find().forEach(template => {
+  (template.requirements || []).filter(requirement => requirement.type === "meal").forEach(requirement => {
+    (requirement.requiredCapabilities || []).forEach(capability => {
+      if (dietaryCapabilityNames.has(capability)) {
+        mixedCatalogCapabilities.push(`eventTemplates/${template.id}/${requirement.id}/requiredCapabilities.${capability}`);
+      }
+    });
+  });
+});
+if (mixedCatalogCapabilities.length > 0) {
+  failSeed(`Dietary capabilities leaked into event/menu or product-function capabilities: ${mixedCatalogCapabilities.join(", ")}`);
+}
+if (unknownDietaryCapabilities.length > 0) {
+  failSeed(`Dietary capabilities without constraint metadata: ${unknownDietaryCapabilities.join(", ")}`);
 }
 
 const unresolvedRequirements = [];
@@ -63,7 +177,7 @@ db.eventTemplates.find().forEach(template => {
 });
 
 if (unresolvedRequirements.length > 0) {
-  throw new Error(`Requirements without candidates: ${unresolvedRequirements.join(", ")}`);
+  failSeed(`Requirements without candidates: ${unresolvedRequirements.join(", ")}`);
 }
 
 const missingIngredientConcepts = [];
@@ -76,7 +190,7 @@ db.meals.find().forEach(meal => {
 });
 
 if (missingIngredientConcepts.length > 0) {
-  throw new Error(`Ingredients without products: ${missingIngredientConcepts.join(", ")}`);
+  failSeed(`Ingredients without products: ${missingIngredientConcepts.join(", ")}`);
 }
 
 const invalidSwissScores = [];
@@ -105,7 +219,78 @@ db.meals.find().forEach(meal => {
 });
 
 if (invalidSwissScores.length > 0) {
-  throw new Error(`Invalid Swiss scores: ${invalidSwissScores.join(", ")}`);
+  failSeed(`Invalid Swiss scores: ${invalidSwissScores.join(", ")}`);
+}
+
+const requiredHalalDocuments = [
+  [db.meals, "halal-chicken-skewers"],
+  [db.meals, "halal-chicken-rice-bowl"],
+  [db.products, "halal-chicken-skewers-40"],
+  [db.products, "halal-chicken-rice-bowls-10"]
+];
+const invalidHalalDocuments = [];
+for (const fixture of requiredHalalDocuments) {
+  const collection = fixture[0];
+  const id = fixture[1];
+  const document = collection.findOne({ id: id });
+  if (!document || !(document.dietaryCapabilities || []).includes("halal")) invalidHalalDocuments.push(id);
+}
+if (invalidHalalDocuments.length > 0) {
+  failSeed(`Missing or incorrectly tagged halal seed documents: ${invalidHalalDocuments.join(", ")}`);
+}
+
+const glutenFreeMeal = db.meals.findOne({ id: "gluten-free-tomato-frittata" });
+if (!glutenFreeMeal || !(glutenFreeMeal.dietaryCapabilities || []).includes("gluten-free")) {
+  failSeed("Missing or incorrectly tagged gluten-free-tomato-frittata meal.");
+}
+if ((glutenFreeMeal.capabilities || []).includes("gluten-free")) {
+  failSeed("Gluten-free dietary capability leaked into gluten-free-tomato-frittata event capabilities.");
+}
+
+const glutenFreeIngredientProducts = ["mozzarella-1kg", "cherry-tomatoes-500g", "basil-100g", "eggs-30"];
+const invalidGlutenFreeProducts = glutenFreeIngredientProducts.filter(id => {
+  const product = db.products.findOne({ id });
+  return !product || !(product.dietaryCapabilities || []).includes("gluten-free");
+});
+if (invalidGlutenFreeProducts.length > 0) {
+  failSeed(`Missing or incorrectly tagged gluten-free ingredient products: ${invalidGlutenFreeProducts.join(", ")}`);
+}
+
+const expandedDietaryFixtures = [
+  { collectionName: "meals", id: "lentil-quinoa-bowl", capabilities: expectedDietaryConstraintIds },
+  { collectionName: "meals", id: "lactose-free-bircher", capabilities: ["lactose-free", "nut-free"] },
+  { collectionName: "meals", id: "gluten-free-brownie-bites", capabilities: ["gluten-free"] },
+  { collectionName: "meals", id: "smoked-salmon-cucumber-bites", capabilities: ["gluten-free", "lactose-free", "nut-free"] },
+  { collectionName: "meals", id: "vegetable-rice-paper-rolls", capabilities: expectedDietaryConstraintIds },
+  { collectionName: "products", id: "lactose-free-yogurt-1kg", capabilities: ["gluten-free", "lactose-free", "nut-free"] },
+  { collectionName: "products", id: "rice-paper-rolls-30", capabilities: expectedDietaryConstraintIds }
+];
+const invalidExpandedDietaryFixtures = [];
+expandedDietaryFixtures.forEach(fixture => {
+  const document = db.getCollection(fixture.collectionName).findOne({ id: fixture.id });
+  const missingCapabilities = fixture.capabilities.filter(capability =>
+    !(document?.dietaryCapabilities || []).includes(capability)
+  );
+  if (!document || missingCapabilities.length > 0) {
+    invalidExpandedDietaryFixtures.push(
+      `${fixture.collectionName}/${fixture.id}${missingCapabilities.length > 0 ? `/missing:${missingCapabilities.join("+")}` : ""}`
+    );
+  }
+});
+if (invalidExpandedDietaryFixtures.length > 0) {
+  failSeed(`Missing or incorrectly tagged expanded dietary fixtures: ${invalidExpandedDietaryFixtures.join(", ")}`);
+}
+
+const missingWaterAlternatives = [];
+for (const id of ["mineral-water-6x15", "budget-water-12l"]) {
+  const product = db.products.findOne({ id: id });
+  const capabilities = product?.capabilities || [];
+  if (!product || product.concept !== "water" || !capabilities.includes("water") || !capabilities.includes("non-alcoholic-drink")) {
+    missingWaterAlternatives.push(id);
+  }
+}
+if (missingWaterAlternatives.length > 0) {
+  failSeed(`Missing water weighting alternatives: ${missingWaterAlternatives.join(", ")}`);
 }
 
 print("");
@@ -115,4 +300,16 @@ db.eventTemplates.find({}, { id: 1, name: 1 }).sort({ id: 1 }).forEach(template 
 });
 
 print("");
-print("All requirements, ingredients, and priority metadata resolve; Swiss scores match origin data.");
+print("Dietary constraints:");
+db.dietaryConstraints.find({}, { id: 1, label: 1 }).sort({ displayOrder: 1 }).forEach(constraint => {
+  print(` - ${constraint.label} (${constraint.id})`);
+});
+
+print("");
+print("Meal categories:");
+db.mealCategories.find({}, { id: 1, label: 1 }).sort({ displayOrder: 1 }).forEach(category => {
+  print(` - ${category.label} (${category.id})`);
+});
+
+print("");
+print("All template defaults, event/dietary capability boundaries, requirements, ingredients, priority metadata, constraints, categories, Swiss scores, dietary fixtures, and water alternatives are valid.");

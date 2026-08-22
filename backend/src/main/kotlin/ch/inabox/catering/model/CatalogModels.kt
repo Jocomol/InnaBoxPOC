@@ -63,6 +63,29 @@ data class PlanningPriority(
     val highLabel: String? = null,
 )
 
+@Document("dietaryConstraints")
+data class DietaryConstraintDefinition(
+    @Id @get:JsonIgnore val mongoId: ObjectId? = null,
+    @Field("id") @get:JsonProperty("id") val constraintId: String,
+    val label: String,
+    val description: String,
+    val displayOrder: Int = 0,
+    // Legacy metadata retained while existing Mongo volumes are upgraded.
+    val requiredCapabilities: Set<String> = emptySet(),
+    val excludedCapabilities: Set<String> = emptySet(),
+    val excludedConcepts: Set<String> = emptySet(),
+    val dietaryCapability: String? = null,
+)
+
+@Document("mealCategories")
+data class MealCategory(
+    @Id @get:JsonIgnore val mongoId: ObjectId? = null,
+    @Field("id") @get:JsonProperty("id") val categoryId: String,
+    val label: String,
+    val description: String = "",
+    val displayOrder: Int = 0,
+)
+
 @Document("eventTemplates")
 @Schema(description = "Reusable event definition containing default values, requirements, and scoring weights.")
 data class EventTemplate(
@@ -114,6 +137,7 @@ data class Meal(
     val mealId: String,
     @field:Schema(description = "Human-readable dish name.", example = "Caprese Skewers")
     val name: String,
+    val categoryIds: Set<String> = emptySet(),
     @field:Schema(
         description = "Traits used for requirement matching, hard filtering, and preference tie-breaking.",
         example = "[\"vegetarian\",\"savory\",\"finger-food\",\"cold\",\"apero\",\"prepare-ahead\"]",
@@ -126,6 +150,7 @@ data class Meal(
         example = "{\"price\":0.65,\"swiss\":1,\"presentation\":0.9,\"prepEase\":0.6,\"sustainability\":0.75}",
     )
     val scores: Map<String, Double> = emptyMap(),
+    val dietaryCapabilities: Set<String> = emptySet(),
 )
 
 @Schema(description = "Quantity contained in one purchasable product package.")
@@ -181,4 +206,5 @@ data class Product(
     val scores: Map<String, Double> = emptyMap(),
     @field:Schema(description = "Optional conversion used when a requirement is expressed in servings rather than the package unit.")
     val conversion: ProductConversion? = null,
+    val dietaryCapabilities: Set<String> = emptySet(),
 )

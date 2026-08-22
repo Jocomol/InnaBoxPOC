@@ -122,18 +122,17 @@ data class ResolvePlanRequest(
         requiredMode = Schema.RequiredMode.NOT_REQUIRED,
     )
     val requiredMealIds: Set<String> = emptySet(),
-    @field:Valid
-    @field:Schema(requiredMode = Schema.RequiredMode.NOT_REQUIRED)
-    val preferences: CustomerPreferences = CustomerPreferences(),
-    @field:Schema(
-        description = "Per-priority overrides in the range 0.0–1.0. Overrides are merged with database and template defaults, then normalized to sum to 1. Unknown priority IDs are rejected.",
-        example = "{\"price\":0.3,\"swiss\":0.25,\"presentation\":0.2,\"prepEase\":0.15,\"sustainability\":0.1}",
-        requiredMode = Schema.RequiredMode.NOT_REQUIRED,
-    )
+    val selectedConstraintIds: Set<String> = emptySet(),
+    @field:Valid val preferences: CustomerPreferences = CustomerPreferences(),
     val weights: Map<String, Double> = emptyMap(),
     @field:Valid
     @field:Schema(requiredMode = Schema.RequiredMode.NOT_REQUIRED)
     val availableInventory: List<InventoryItem> = emptyList(),
     @field:Schema(requiredMode = Schema.RequiredMode.NOT_REQUIRED)
     val hardConstraints: HardConstraints = HardConstraints(),
+    @field:Positive val mealCount: Int? = null,
+    // Null means the canonical field was omitted; an explicitly supplied empty map still overrides aliases.
+    val dietaryShares: Map<String, Double>? = null,
+    // Compatibility alias. dietaryShares takes precedence when both are supplied.
+    val capabilityShares: Map<String, Double> = emptyMap(),
 )
