@@ -15,3 +15,14 @@ management:
     web:
       exposure:
         include: health
+
+springdoc:
+  packages-to-scan: ch.inabox.catering.controller
+  paths-to-match: /api/**
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method
+    tags-sorter: alpha
+    try-it-out-enabled: true

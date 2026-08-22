@@ -4,6 +4,7 @@ import ch.inabox.catering.service.PlanResolutionException
 import ch.inabox.catering.service.TemplateNotFoundException
 import org.springframework.http.HttpStatus
 import org.springframework.http.ProblemDetail
+import org.springframework.http.converter.HttpMessageNotReadableException
 import org.springframework.web.bind.MethodArgumentNotValidException
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
@@ -29,6 +30,14 @@ class ApiExceptionHandler {
             .joinToString("; ") { "${it.field}: ${it.defaultMessage}" }
         return problem(HttpStatus.BAD_REQUEST, "Request validation failed", details)
     }
+
+    @ExceptionHandler(HttpMessageNotReadableException::class)
+    fun malformedBody(): ProblemDetail =
+        problem(
+            HttpStatus.BAD_REQUEST,
+            "Malformed request body",
+            "Request body is missing, malformed, or contains a value of the wrong type",
+        )
 
     private fun problem(status: HttpStatus, title: String, detail: String?): ProblemDetail =
         ProblemDetail.forStatusAndDetail(status, detail ?: title).also { it.title = title }
