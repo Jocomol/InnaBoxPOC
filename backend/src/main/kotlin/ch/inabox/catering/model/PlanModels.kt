@@ -22,6 +22,8 @@ data class EventSummary(
     val appliedWeights: Map<String, Double>,
     val preferences: CustomerPreferences,
     val hardConstraints: HardConstraints,
+    val mealCount: Int? = null,
+    val dietaryShares: Map<String, Double> = emptyMap(),
 )
 
 data class SelectedMeal(
@@ -35,6 +37,7 @@ data class SelectedMeal(
     val scoreComponents: Map<String, Double>,
     val finalWeightedScore: Double,
     val guaranteed: Boolean = false,
+    val matchedDietaryCapabilities: Set<String> = emptySet(),
 )
 
 data class ConstraintConflict(

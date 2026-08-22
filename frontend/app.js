@@ -44,6 +44,8 @@ const developerTools = document.querySelector('#developer-tools');
 const catalogSearch = document.querySelector('#catalog-search');
 const catalogCapability = document.querySelector('#catalog-capability');
 const catalogResults = document.querySelector('#catalog-results');
+const guestCountInput = document.querySelector('#guest-count');
+const mealCountInput = document.querySelector('#meal-count-input');
 
 let pickerDebounce;
 let inventoryPickerDebounce;
@@ -67,6 +69,7 @@ document.querySelector('#back-to-form').addEventListener('click', () => {
   form.scrollIntoView({ behavior: 'smooth', block: 'start' });
 });
 templateSelect.addEventListener('change', applyTemplate);
+guestCountInput.addEventListener('input', syncDietaryGuestLimits);
 form.addEventListener('submit', resolvePlan);
 pickerSearch.addEventListener('input', () => {
   clearTimeout(pickerDebounce);
@@ -109,11 +112,6 @@ document.querySelectorAll('[data-catalog-type]').forEach(button => {
   });
 });
 
-const shareInput = document.querySelector('#vegetarian-share');
-shareInput.addEventListener('input', () => {
-  document.querySelector('#vegetarian-share-value').value = `${Math.round(Number(shareInput.value) * 100)}%`;
-});
-
 async function loadPlannerData() {
   try {
     [state.templates, state.priorities, state.constraints, state.mealCategories, state.mealCapabilities] = await Promise.all([
@@ -151,49 +149,72 @@ function renderDietaryConstraints() {
 
   constraintRoot.innerHTML = state.constraints.map(constraint => `
     <label class="constraint-option">
-      <input type="checkbox" value="${escapeHtml(constraint.id)}" data-constraint-id="${escapeHtml(constraint.id)}">
       <span class="constraint-card">
-        <span class="constraint-box" aria-hidden="true">✓</span>
         <span>
           <strong>${escapeHtml(constraint.label)}</strong>
           <small>${escapeHtml(constraint.description)}</small>
+        </span>
+        <span class="dietary-count-control">
+          <input type="number" min="0" value="0" inputmode="numeric"
+            aria-label="${escapeHtml(constraint.label)} guests"
+            data-dietary-count
+            data-constraint-id="${escapeHtml(constraint.id)}"
+            data-dietary-capability="${escapeHtml(constraint.dietaryCapability || constraint.requiredCapabilities?.[0] || constraint.id)}">
+          <span>guests</span>
         </span>
       </span>
     </label>
   `).join('');
 
-  constraintRoot.querySelectorAll('input[data-constraint-id]').forEach(input => {
-    input.addEventListener('change', () => {
+  constraintRoot.querySelectorAll('input[data-dietary-count]').forEach(input => {
+    input.addEventListener('input', () => {
+      input.value = String(clamp(Math.trunc(Number(input.value) || 0), 0, currentGuestCount()));
       updateConstraintActions();
-      renderRequiredMeals();
-      renderPickerResults();
     });
   });
+  syncDietaryGuestLimits();
   updateConstraintActions();
 }
 
 function updateConstraintActions() {
-  const count = selectedConstraintIds().size;
+  const count = Object.keys(dietaryGuestCounts()).length;
   clearConstraintsButton.hidden = count === 0;
-  clearConstraintsButton.textContent = count ? `Clear ${count} selected` : 'Clear selected';
+  clearConstraintsButton.textContent = count ? `Clear ${count} count${count === 1 ? '' : 's'}` : 'Clear counts';
 }
 
 function clearConstraints() {
-  constraintRoot.querySelectorAll('input[data-constraint-id]:checked').forEach(input => {
-    input.checked = false;
+  constraintRoot.querySelectorAll('input[data-dietary-count]').forEach(input => {
+    input.value = '0';
   });
   updateConstraintActions();
-  renderRequiredMeals();
-  renderPickerResults();
 }
 
-function selectedConstraintIds() {
-  return new Set([...constraintRoot.querySelectorAll('input[data-constraint-id]:checked')].map(input => input.value));
+function currentGuestCount() {
+  return Math.max(1, Math.trunc(Number(guestCountInput.value) || 1));
 }
 
-function selectedConstraintDefinitions() {
-  const ids = selectedConstraintIds();
-  return state.constraints.filter(constraint => ids.has(constraint.id));
+function syncDietaryGuestLimits() {
+  const guests = currentGuestCount();
+  constraintRoot.querySelectorAll('input[data-dietary-count]').forEach(input => {
+    input.max = String(guests);
+    input.value = String(clamp(Math.trunc(Number(input.value) || 0), 0, guests));
+  });
+  updateConstraintActions();
+}
+
+function dietaryGuestCounts() {
+  return [...constraintRoot.querySelectorAll('input[data-dietary-count]')].reduce((counts, input) => {
+    const count = clamp(Math.trunc(Number(input.value) || 0), 0, currentGuestCount());
+    if (count > 0) counts[input.dataset.dietaryCapability] = count;
+    return counts;
+  }, {});
+}
+
+function dietaryShares() {
+  const guests = currentGuestCount();
+  return Object.fromEntries(
+    Object.entries(dietaryGuestCounts()).map(([capability, count]) => [capability, count / guests])
+  );
 }
 
 function renderMealCapabilities() {
@@ -357,23 +378,8 @@ function renderRequiredMeals() {
 }
 
 function mealConstraintConflicts(meal) {
-  const capabilities = normalizedSet(meal.capabilities || []);
-  const ingredientConcepts = normalizedSet((meal.ingredients || []).map(ingredient => ingredient.concept));
-  return selectedConstraintDefinitions().map(constraint => {
-    const required = normalizedSet(constraint.requiredCapabilities || []);
-    const excluded = normalizedSet(constraint.excludedCapabilities || []);
-    const excludedConcepts = normalizedSet(constraint.excludedConcepts || []);
-    const missingRequiredCapabilities = [...required].filter(value => !capabilities.has(value));
-    const conflictingCapabilities = [...excluded].filter(value => capabilities.has(value));
-    const conflictingConcepts = [...excludedConcepts].filter(value => ingredientConcepts.has(value));
-    if (!missingRequiredCapabilities.length && !conflictingCapabilities.length && !conflictingConcepts.length) return null;
-    return {
-      constraint,
-      missingRequiredCapabilities,
-      excludedCapabilities: conflictingCapabilities,
-      excludedConcepts: conflictingConcepts
-    };
-  }).filter(Boolean);
+  // Dietary guest counts are allocation minimums, not per-meal hard constraints.
+  return [];
 }
 
 function conflictSummary(conflicts) {
@@ -399,15 +405,7 @@ function applyTemplate() {
   if (!template) return;
   description.textContent = template.description;
   renderWeights(template.weights);
-  const vegetarianShare = template.defaults?.vegetarianShare;
-  const hasVegetarianRequirement = template.requirements.some(requirement =>
-    requirement.requiredCapabilities.includes('vegetarian') && requirement.target.share != null
-  );
-  document.querySelector('#vegetarian-share-field').hidden = !hasVegetarianRequirement;
-  if (vegetarianShare != null) {
-    shareInput.value = vegetarianShare;
-    shareInput.dispatchEvent(new Event('input'));
-  }
+  mealCountInput.value = template.defaults?.mealCount == null ? '' : String(template.defaults.mealCount);
 }
 
 function renderWeights(weights) {
@@ -568,19 +566,19 @@ async function resolvePlan(event) {
     amount: Number(row.querySelector('.inventory-amount').value),
     unit: row.querySelector('.inventory-unit').value
   })).filter(item => item.concept && item.amount > 0);
-  const shareVisible = !document.querySelector('#vegetarian-share-field').hidden;
   const servingsValue = document.querySelector('#servings-per-guest').value;
+  const mealCountValue = mealCountInput.value;
 
   const request = {
     templateId: templateSelect.value,
     guestCount: Number(document.querySelector('#guest-count').value),
     budget: Number(document.querySelector('#budget').value),
     servingsPerGuest: servingsValue === '' ? null : Number(servingsValue),
+    mealCount: mealCountValue === '' ? null : Number(mealCountValue),
+    dietaryShares: dietaryShares(),
     requiredMealIds: [...state.requiredMeals.keys()].sort(),
-    selectedConstraintIds: [...selectedConstraintIds()].sort(),
     weights,
     preferences: {
-      vegetarianShare: shareVisible ? Number(shareInput.value) : null,
       preferredCapabilities: document.querySelector('#prepare-ahead').checked ? ['prepare-ahead'] : []
     },
     availableInventory,
@@ -681,7 +679,10 @@ function renderMeals(meals, conflicts) {
           <span class="score" title="Weighted score">${Math.round(meal.finalWeightedScore * 100)}</span>
         </div>
         ${mealConflicts.length ? `<div class="meal-conflict-box"><strong>Review before service:</strong> ${escapeHtml(conflictText)}</div>` : ''}
-        <div class="chips">${(meal.matchedCapabilities || []).map(capability => `<span class="chip">${escapeHtml(humanize(capability))}</span>`).join('')}</div>
+        <div class="chips">
+          ${(meal.matchedCapabilities || []).map(capability => `<span class="chip">${escapeHtml(humanize(capability))}</span>`).join('')}
+          ${(meal.matchedDietaryCapabilities || []).map(capability => `<span class="chip dietary">${escapeHtml(humanize(capability))} coverage</span>`).join('')}
+        </div>
         <div class="meal-meta"><span>${meal.servings} servings</span><span>${quantity(meal.targetQuantity)} target</span></div>
         <details class="score-details">
           <summary>Why this was selected</summary>
@@ -778,7 +779,10 @@ function priorityEntries(scores) {
 
 function renderCatalogCapabilities() {
   const items = state[state.catalogType] || [];
-  const capabilities = [...new Set(items.flatMap(item => item.capabilities || []))].sort();
+  const capabilities = [...new Set(items.flatMap(item => [
+    ...(item.capabilities || []),
+    ...(item.dietaryCapabilities || [])
+  ]))].sort();
   catalogCapability.innerHTML = [
     '<option value="">All capabilities</option>',
     ...capabilities.map(capability => `<option value="${escapeHtml(capability)}">${escapeHtml(humanize(capability))}</option>`)
@@ -791,7 +795,9 @@ function renderCatalog() {
   const query = catalogSearch.value.trim().toLocaleLowerCase();
   const capability = catalogCapability.value;
   const filtered = items.filter(item => {
-    const matchesCapability = !capability || (item.capabilities || []).includes(capability);
+    const matchesCapability = !capability ||
+      (item.capabilities || []).includes(capability) ||
+      (item.dietaryCapabilities || []).includes(capability);
     return matchesCapability && (!query || catalogSearchText(item).includes(query));
   });
 
@@ -812,6 +818,7 @@ function catalogSearchText(item) {
     item.originCountry,
     ...(item.categoryIds || []),
     ...(item.capabilities || []),
+    ...(item.dietaryCapabilities || []),
     ...ingredientConcepts
   ].filter(Boolean).join(' ').toLocaleLowerCase();
 }
@@ -829,6 +836,7 @@ function recipeCard(meal) {
       </div>
       ${categories.length ? `<div class="chips catalog-chips">${categories.map(label => `<span class="chip">${escapeHtml(label)}</span>`).join('')}</div>` : ''}
       ${capabilityChips(meal.capabilities)}
+      ${dietaryCapabilityChips(meal.dietaryCapabilities)}
       <div class="catalog-card-body">
         <h4>Ingredients per serving</h4>
         <ul class="ingredient-list">${ingredients}</ul>
@@ -849,6 +857,7 @@ function productCard(product) {
         <span>${formatMoney(product.price.amount)}</span>
       </div>
       ${capabilityChips(product.capabilities)}
+      ${dietaryCapabilityChips(product.dietaryCapabilities)}
       <dl class="product-facts">
         <div><dt>Concept</dt><dd>${escapeHtml(humanize(product.concept))}</dd></div>
         <div><dt>Package</dt><dd>${quantity(product.package)}</dd></div>
@@ -863,6 +872,13 @@ function productCard(product) {
 function capabilityChips(capabilities) {
   return `<div class="chips catalog-chips">${(capabilities || []).map(capability =>
     `<span class="chip">${escapeHtml(humanize(capability))}</span>`
+  ).join('')}</div>`;
+}
+
+function dietaryCapabilityChips(capabilities) {
+  if (!(capabilities || []).length) return '';
+  return `<div class="chips catalog-chips">${capabilities.map(capability =>
+    `<span class="chip dietary">${escapeHtml(humanize(capability))}</span>`
   ).join('')}</div>`;
 }
 

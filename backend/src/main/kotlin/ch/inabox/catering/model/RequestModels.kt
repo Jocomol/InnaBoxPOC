@@ -39,4 +39,9 @@ data class ResolvePlanRequest(
     val weights: Map<String, Double> = emptyMap(),
     @field:Valid val availableInventory: List<InventoryItem> = emptyList(),
     val hardConstraints: HardConstraints = HardConstraints(),
+    @field:Positive val mealCount: Int? = null,
+    // Null means the canonical field was omitted; an explicitly supplied empty map still overrides aliases.
+    val dietaryShares: Map<String, Double>? = null,
+    // Compatibility alias. dietaryShares takes precedence when both are supplied.
+    val capabilityShares: Map<String, Double> = emptyMap(),
 )

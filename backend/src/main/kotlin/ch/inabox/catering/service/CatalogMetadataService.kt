@@ -25,7 +25,7 @@ class CatalogMetadataService(
         if (configured.isNotEmpty()) return configured.sortedWith(constraintOrder)
 
         val capabilities = mealRepository.findAll()
-            .flatMap { it.capabilities }
+            .flatMap { it.dietaryCapabilities }
             .map { it.trim().lowercase() }
             .toSet()
 
@@ -35,8 +35,9 @@ class CatalogMetadataService(
                     DietaryConstraintDefinition(
                         constraintId = "vegetarian",
                         label = "Vegetarian",
-                        description = "Only select meals that are marked as vegetarian.",
+                        description = "Allocate enough vegetarian-compatible servings for the entered guest count.",
                         displayOrder = 10,
+                        dietaryCapability = "vegetarian",
                         requiredCapabilities = setOf("vegetarian"),
                     ),
                 )
@@ -46,9 +47,22 @@ class CatalogMetadataService(
                     DietaryConstraintDefinition(
                         constraintId = "vegan",
                         label = "Vegan",
-                        description = "Only select meals that are marked as vegan.",
+                        description = "Allocate enough vegan-compatible servings for the entered guest count.",
                         displayOrder = 20,
+                        dietaryCapability = "vegan",
                         requiredCapabilities = setOf("vegan"),
+                    ),
+                )
+            }
+            if ("halal" in capabilities) {
+                add(
+                    DietaryConstraintDefinition(
+                        constraintId = "halal",
+                        label = "Halal",
+                        description = "Allocate enough halal-compatible servings for the entered guest count.",
+                        displayOrder = 30,
+                        dietaryCapability = "halal",
+                        requiredCapabilities = setOf("halal"),
                     ),
                 )
             }

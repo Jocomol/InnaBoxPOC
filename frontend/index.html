@@ -21,7 +21,7 @@
     <section class="hero">
       <p class="eyebrow">From headcount to checkout</p>
       <h1>Plan the event.<br><em>We calculate the rest.</em></h1>
-      <p class="hero-copy">Set the occasion, dietary rules, specific dishes and stock on hand. Tableplan returns a deterministic menu and package-level shopping list.</p>
+      <p class="hero-copy">Set the occasion, dietary guest counts, specific dishes and stock on hand. Tableplan returns a deterministic menu and package-level shopping list.</p>
     </section>
 
     <form id="planner-form" class="planner" novalidate>
@@ -57,15 +57,15 @@
         <div class="section-heading action-heading">
           <span>02</span>
           <div>
-            <h2 id="constraints-heading">Dietary constraints</h2>
-            <p>Choose every rule that the automatically generated menu must follow.</p>
+            <h2 id="constraints-heading">Dietary guest counts</h2>
+            <p>Enter how many guests need compatible servings. One dish may cover more than one dietary need.</p>
           </div>
           <button id="clear-constraints" class="tertiary-button" type="button" hidden>Clear selected</button>
         </div>
         <div id="dietary-constraints" class="constraint-grid" aria-live="polite">
           <p class="empty-row">Loading dietary constraints…</p>
         </div>
-        <p class="constraint-note">Specific guaranteed meals may override these rules, but every exception will be highlighted before and after generation.</p>
+        <p class="constraint-note">These counts set minimum serving coverage; they do not require every dish in the menu to match.</p>
       </section>
 
       <section class="panel" aria-labelledby="guaranteed-heading">
@@ -103,18 +103,16 @@
           <span class="advanced-copy">Optional fine-tuning</span>
         </summary>
         <div class="advanced-content">
-          <label class="field compact" id="vegetarian-share-field">
-            <span>Vegetarian share</span>
-            <div class="range-line">
-              <input id="vegetarian-share" type="range" min="0" max="1" step="0.05" value="0.3">
-              <output id="vegetarian-share-value">30%</output>
-            </div>
-          </label>
-
           <label class="field compact">
             <span>Food servings / guest</span>
             <input id="servings-per-guest" type="number" min="1" max="10" step="1" inputmode="numeric" placeholder="Use template">
             <small class="field-hint">Optional · maximum 10</small>
+          </label>
+
+          <label class="field compact">
+            <span>Distinct meals offered</span>
+            <input id="meal-count-input" type="number" min="1" step="1" inputmode="numeric" placeholder="Use template">
+            <small class="field-hint">Changing this does not change total servings</small>
           </label>
 
           <label class="check-field">
@@ -154,7 +152,7 @@
       <section class="result-section">
         <div class="result-section-heading">
           <h3>Selected menu</h3>
-          <p>Constraint exceptions are shown directly on the affected recipe.</p>
+          <p>Dietary serving matches are shown on each selected recipe.</p>
         </div>
         <div id="selected-meals" class="meal-grid"></div>
       </section>
@@ -228,7 +226,7 @@
         <div>
           <p class="eyebrow">Specific dishes</p>
           <h2>Choose guaranteed meals</h2>
-          <p>Search directly or browse by category. Conflicts are allowed, but clearly flagged.</p>
+          <p>Search directly or browse by category. Guaranteed dishes still pass normal event and hard-constraint checks.</p>
         </div>
         <button id="close-meal-picker" class="icon-button" type="button" aria-label="Close meal picker">×</button>
       </div>

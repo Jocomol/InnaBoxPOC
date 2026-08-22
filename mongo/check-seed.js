@@ -1,5 +1,10 @@
 db = db.getSiblingDB("catering");
 
+function failSeed(message) {
+  print(`SEED CHECK FAILED: ${message}`);
+  quit(1);
+}
+
 const expectedTemplateIds = [
   "business-apero",
   "brunch",
@@ -23,8 +28,8 @@ print(`Priorities:  ${priorityCount}`);
 print(`Constraints: ${constraintCount}`);
 print(`Categories:  ${categoryCount}`);
 
-if (templateCount < 6 || mealCount < 19 || productCount < 17 || priorityCount < 5 || constraintCount < 2 || categoryCount < 1) {
-  throw new Error("Seed catalog is incomplete; expected at least 6 templates, 19 meals, 17 products, 5 planning priorities, 2 dietary constraints, and 1 meal category.");
+if (templateCount !== 6 || mealCount !== 21 || productCount !== 20 || priorityCount !== 5 || constraintCount < 3 || categoryCount < 1) {
+  failSeed("Unexpected seed size; expected exactly 6 templates, 21 meals, 20 products, and 5 planning priorities, plus at least 3 dietary constraints and 1 meal category.");
 }
 
 const definedPriorityIds = new Set(db.planningPriorities.find({}, { id: 1 }).toArray().map(priority => priority.id));
@@ -45,7 +50,7 @@ db.eventTemplates.find().forEach(template => {
 });
 
 if (undefinedPriorityReferences.length > 0) {
-  throw new Error(`Score or weight keys without planning-priority metadata: ${undefinedPriorityReferences.join(", ")}`);
+  failSeed(`Score or weight keys without planning-priority metadata: ${undefinedPriorityReferences.join(", ")}`);
 }
 
 const definedCategoryIds = new Set(db.mealCategories.find({}, { id: 1 }).toArray().map(category => category.id));
@@ -61,11 +66,15 @@ if (undefinedCategoryReferences.length > 0) {
 
 const invalidConstraints = [];
 db.dietaryConstraints.find().forEach(constraint => {
+  const dietaryCapability = (constraint.dietaryCapability || "").trim();
   const ruleCount = (constraint.requiredCapabilities || []).length +
     (constraint.excludedCapabilities || []).length +
     (constraint.excludedConcepts || []).length;
-  if (!constraint.id || !constraint.label || ruleCount === 0) {
+  if (!constraint.id || !constraint.label || !dietaryCapability || ruleCount === 0) {
     invalidConstraints.push(constraint.id || "<missing-id>");
+  }
+  if (dietaryCapability && !db.meals.findOne({ dietaryCapabilities: dietaryCapability })) {
+    invalidConstraints.push(`${constraint.id || "<missing-id>"}/missing-meal-tag:${dietaryCapability}`);
   }
 });
 if (invalidConstraints.length > 0) {
@@ -74,7 +83,57 @@ if (invalidConstraints.length > 0) {
 
 const missingTemplates = expectedTemplateIds.filter(id => !db.eventTemplates.findOne({ id }));
 if (missingTemplates.length > 0) {
-  throw new Error(`Missing templates: ${missingTemplates.join(", ")}`);
+  failSeed(`Missing templates: ${missingTemplates.join(", ")}`);
+}
+
+const invalidTemplateDefaults = [];
+const templateDietaryShares = [];
+db.eventTemplates.find().forEach(template => {
+  const configuredMealCount = template.defaults?.mealCount;
+  if (!Number.isInteger(configuredMealCount) || configuredMealCount <= 0) {
+    invalidTemplateDefaults.push(`${template.id}=${configuredMealCount}`);
+  }
+  if (Object.prototype.hasOwnProperty.call(template.defaults || {}, "vegetarianShare")) {
+    templateDietaryShares.push(`${template.id}/defaults.vegetarianShare`);
+  }
+  (template.requirements || []).forEach(requirement => {
+    if (requirement.target?.share !== undefined && requirement.target?.share !== null) {
+      templateDietaryShares.push(`${template.id}/${requirement.id}/target.share`);
+    }
+  });
+});
+
+if (invalidTemplateDefaults.length > 0) {
+  failSeed(`Templates with invalid defaults.mealCount: ${invalidTemplateDefaults.join(", ")}`);
+}
+
+if (templateDietaryShares.length > 0) {
+  failSeed(`Dietary shares must not be stored in templates: ${templateDietaryShares.join(", ")}`);
+}
+
+const dietaryCapabilityNames = new Set(
+  db.dietaryConstraints.find({}, { dietaryCapability: 1 }).toArray().map(constraint => constraint.dietaryCapability)
+);
+const mixedMealCapabilities = [];
+db.meals.find().forEach(meal => {
+  if (!Array.isArray(meal.dietaryCapabilities)) {
+    mixedMealCapabilities.push(`${meal.id}/missing-dietaryCapabilities`);
+  }
+  (meal.capabilities || []).forEach(capability => {
+    if (dietaryCapabilityNames.has(capability)) mixedMealCapabilities.push(`${meal.id}/capabilities.${capability}`);
+  });
+});
+db.eventTemplates.find().forEach(template => {
+  (template.requirements || []).filter(requirement => requirement.type === "meal").forEach(requirement => {
+    (requirement.requiredCapabilities || []).forEach(capability => {
+      if (dietaryCapabilityNames.has(capability)) {
+        mixedMealCapabilities.push(`${template.id}/${requirement.id}/requiredCapabilities.${capability}`);
+      }
+    });
+  });
+});
+if (mixedMealCapabilities.length > 0) {
+  failSeed(`Dietary capabilities leaked into event/menu capabilities: ${mixedMealCapabilities.join(", ")}`);
 }
 
 const unresolvedRequirements = [];
@@ -91,7 +150,7 @@ db.eventTemplates.find().forEach(template => {
 });
 
 if (unresolvedRequirements.length > 0) {
-  throw new Error(`Requirements without candidates: ${unresolvedRequirements.join(", ")}`);
+  failSeed(`Requirements without candidates: ${unresolvedRequirements.join(", ")}`);
 }
 
 const missingIngredientConcepts = [];
@@ -104,7 +163,7 @@ db.meals.find().forEach(meal => {
 });
 
 if (missingIngredientConcepts.length > 0) {
-  throw new Error(`Ingredients without products: ${missingIngredientConcepts.join(", ")}`);
+  failSeed(`Ingredients without products: ${missingIngredientConcepts.join(", ")}`);
 }
 
 const invalidSwissScores = [];
@@ -133,7 +192,36 @@ db.meals.find().forEach(meal => {
 });
 
 if (invalidSwissScores.length > 0) {
-  throw new Error(`Invalid Swiss scores: ${invalidSwissScores.join(", ")}`);
+  failSeed(`Invalid Swiss scores: ${invalidSwissScores.join(", ")}`);
+}
+
+const requiredHalalDocuments = [
+  [db.meals, "halal-chicken-skewers"],
+  [db.meals, "halal-chicken-rice-bowl"],
+  [db.products, "halal-chicken-skewers-40"],
+  [db.products, "halal-chicken-rice-bowls-10"]
+];
+const invalidHalalDocuments = [];
+for (const fixture of requiredHalalDocuments) {
+  const collection = fixture[0];
+  const id = fixture[1];
+  const document = collection.findOne({ id: id });
+  if (!document || !(document.dietaryCapabilities || []).includes("halal")) invalidHalalDocuments.push(id);
+}
+if (invalidHalalDocuments.length > 0) {
+  failSeed(`Missing or incorrectly tagged halal seed documents: ${invalidHalalDocuments.join(", ")}`);
+}
+
+const missingWaterAlternatives = [];
+for (const id of ["mineral-water-6x15", "budget-water-12l"]) {
+  const product = db.products.findOne({ id: id });
+  const capabilities = product?.capabilities || [];
+  if (!product || product.concept !== "water" || !capabilities.includes("water") || !capabilities.includes("non-alcoholic-drink")) {
+    missingWaterAlternatives.push(id);
+  }
+}
+if (missingWaterAlternatives.length > 0) {
+  failSeed(`Missing water weighting alternatives: ${missingWaterAlternatives.join(", ")}`);
 }
 
 print("");
@@ -155,4 +243,4 @@ db.mealCategories.find({}, { id: 1, label: 1 }).sort({ displayOrder: 1 }).forEac
 });
 
 print("");
-print("All requirements, ingredients, priorities, constraints, categories, and Swiss scores validate.");
+print("All template defaults, event/dietary capability boundaries, requirements, ingredients, priority metadata, constraints, categories, Swiss scores, halal fixtures, and water alternatives are valid.");

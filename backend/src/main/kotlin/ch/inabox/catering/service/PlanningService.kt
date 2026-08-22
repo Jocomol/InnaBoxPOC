@@ -1,6 +1,6 @@
 package ch.inabox.catering.service
 
-import ch.inabox.catering.model.HardConstraints
+import ch.inabox.catering.model.DietaryConstraintDefinition
 import ch.inabox.catering.model.ResolvePlanRequest
 import ch.inabox.catering.model.ShoppingPlan
 import ch.inabox.catering.repository.EventTemplateRepository
@@ -43,16 +43,28 @@ class PlanningService(
         if (unknownConstraintIds.isNotEmpty()) {
             throw IllegalArgumentException("Unknown dietary constraints: ${unknownConstraintIds.joinToString()}")
         }
-        val selectedConstraints = requestedConstraintIds.map { constraintsById.getValue(it) }
-
-        val derivedConstraints = HardConstraints(
-            requiredCapabilities = selectedConstraints.flatMap { it.requiredCapabilities }.toSortedSet(),
-            excludedCapabilities = selectedConstraints.flatMap { it.excludedCapabilities }.toSortedSet(),
-            excludedConcepts = selectedConstraints.flatMap { it.excludedConcepts }.toSortedSet(),
-        )
+        val explicitlySelectedConstraints = requestedConstraintIds.map { constraintsById.getValue(it) }
+        val effectiveDietaryShares = when {
+            request.dietaryShares != null -> request.dietaryShares
+            request.capabilityShares.isNotEmpty() -> request.capabilityShares
+            else -> buildMap {
+                explicitlySelectedConstraints.forEach { definition ->
+                    dietaryCapability(definition)?.let { put(it, 1.0) }
+                }
+                request.preferences.vegetarianShare?.let { share ->
+                    if ("vegetarian" !in this) put("vegetarian", share)
+                }
+            }
+        }
+        val effectiveDietaryCapabilities = effectiveDietaryShares.keys
+            .map { it.trim().lowercase() }
+            .toSet()
+        val selectedConstraints = constraintDefinitions.filter { definition ->
+            dietaryCapability(definition) in effectiveDietaryCapabilities
+        }
         val effectiveRequest = request.copy(
             selectedConstraintIds = selectedConstraints.map { it.constraintId }.toSortedSet(),
-            hardConstraints = mergeConstraints(request.hardConstraints, derivedConstraints),
+            dietaryShares = effectiveDietaryShares,
         )
 
         return plannerEngine.resolve(
@@ -64,9 +76,12 @@ class PlanningService(
         )
     }
 
-    private fun mergeConstraints(first: HardConstraints, second: HardConstraints) = HardConstraints(
-        requiredCapabilities = first.requiredCapabilities + second.requiredCapabilities,
-        excludedCapabilities = first.excludedCapabilities + second.excludedCapabilities,
-        excludedConcepts = first.excludedConcepts + second.excludedConcepts,
-    )
+    private fun dietaryCapability(definition: DietaryConstraintDefinition): String? =
+        definition.dietaryCapability
+            ?.trim()
+            ?.lowercase()
+            ?.takeIf { it.isNotBlank() }
+            ?: definition.requiredCapabilities
+                .map { it.trim().lowercase() }
+                .firstOrNull { it.isNotBlank() }
 }

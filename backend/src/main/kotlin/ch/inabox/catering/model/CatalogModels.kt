@@ -41,9 +41,11 @@ data class DietaryConstraintDefinition(
     val label: String,
     val description: String,
     val displayOrder: Int = 0,
+    // Legacy metadata retained while existing Mongo volumes are upgraded.
     val requiredCapabilities: Set<String> = emptySet(),
     val excludedCapabilities: Set<String> = emptySet(),
     val excludedConcepts: Set<String> = emptySet(),
+    val dietaryCapability: String? = null,
 )
 
 @Document("mealCategories")
@@ -86,6 +88,7 @@ data class Meal(
     val serving: ServingInfo = ServingInfo(),
     val ingredients: List<Ingredient> = emptyList(),
     val scores: Map<String, Double> = emptyMap(),
+    val dietaryCapabilities: Set<String> = emptySet(),
 )
 
 data class PackageInfo(
@@ -117,4 +120,5 @@ data class Product(
     val capabilities: Set<String> = emptySet(),
     val scores: Map<String, Double> = emptyMap(),
     val conversion: ProductConversion? = null,
+    val dietaryCapabilities: Set<String> = emptySet(),
 )

@@ -30,6 +30,7 @@ class MealCatalogService(private val mongoTemplate: MongoTemplate) {
                 Criteria.where("name").regex(regex),
                 Criteria.where("id").regex(regex),
                 Criteria.where("capabilities").regex(regex),
+                Criteria.where("dietaryCapabilities").regex(regex),
                 Criteria.where("ingredients.concept").regex(regex),
             )
         }
@@ -66,7 +67,10 @@ class MealCatalogService(private val mongoTemplate: MongoTemplate) {
         "fruit" -> textMatch("fruit|apple")
         "bakery" -> textMatch("croissant|quiche|pastry|bread|bakery")
         "meat" -> textMatch("ham|meat|beef|chicken|pork|salami")
-        "plant-based" -> Criteria.where("capabilities").`in`("vegetarian", "vegan")
+        "plant-based" -> Criteria().orOperator(
+            Criteria.where("dietaryCapabilities").`in`("vegetarian", "vegan"),
+            Criteria.where("capabilities").`in`("vegetarian", "vegan"),
+        )
         "breakfast" -> Criteria.where("capabilities").`in`("breakfast", "brunch", "coffee-break")
         "lunch" -> Criteria.where("capabilities").`in`("lunch", "buffet")
         "reception" -> Criteria.where("capabilities").`in`("apero", "reception", "finger-food")
