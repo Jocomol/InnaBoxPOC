@@ -75,6 +75,7 @@ i18n.onLanguageChange(() => {
   renderRequiredMeals();
   renderPickerResults();
   renderInventoryPickerResults();
+  renderInventoryEmptyState();
   if (state.currentPlan) renderPlan(state.currentPlan);
   if (state.catalogLoaded) {
     renderCatalogCapabilities();
@@ -549,8 +550,8 @@ function renderWeights(weights) {
 }
 
 function renderInventoryEmptyState() {
-  if (!inventoryRows.children.length) {
-    inventoryRows.innerHTML = `<p class="empty-row">${escapeHtml(t('stock.none'))}</p>`;
+  if (!inventoryRows.querySelector('.inventory-row')) {
+    inventoryRows.innerHTML = `<p class="empty-row" data-i18n="stock.none">${escapeHtml(t('stock.none'))}</p>`;
   }
 }
 

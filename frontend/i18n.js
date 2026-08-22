@@ -8,13 +8,13 @@
   const STORAGE_KEY = 'tableplan.language.v3';
   const DB_NAME = 'tableplan-i18n';
   const DB_VERSION = 1;
-  const CACHE_NAMESPACE = 'catalog-polish-v2';
+  const CACHE_NAMESPACE = 'catalog-polish-v3';
   const MAX_FRONTEND_BATCH = 40;
   const STORE_NAME = 'translations';
 
   const messages = {
     en: {
-      'app.title': 'Tableplan — Catering planner',
+      'app.title': 'Event in a Box — Catering planner',
       'nav.primary': 'Primary navigation',
       'nav.planner': 'Planner',
       'nav.tools': 'Tools',
@@ -22,7 +22,7 @@
       'hero.eyebrow': 'From headcount to checkout',
       'hero.title.1': 'Plan the event.',
       'hero.title.2': 'We calculate the rest.',
-      'hero.copy': 'Set the occasion, dietary rules, specific dishes and stock on hand. Tableplan returns a deterministic menu and package-level shopping list.',
+      'hero.copy': 'Set the occasion, dietary rules, specific dishes and stock on hand. Event in a Box returns a deterministic menu and package-level shopping list.',
       'event.title': 'Event basics',
       'event.loading': 'Loading event templates…',
       'event.format': 'Event format',
@@ -171,7 +171,7 @@
       'catalog.unspecified': 'Unspecified',
       'catalog.planningScores': 'Planning scores',
       'catalog.scoreFallback': 'Catalog-defined planning score.',
-      'footer.poc': 'TABLEPLAN POC',
+      'footer.poc': 'EVENT IN A BOX POC',
       'footer.copy': 'Explainable by design · CHF pricing',
       'unit.piece.one': 'piece', 'unit.piece.many': 'pieces',
       'unit.serving.one': 'serving', 'unit.serving.many': 'servings',
@@ -180,7 +180,7 @@
       'unit.liter.one': 'liter', 'unit.liter.many': 'liters'
     },
     de: {
-      'app.title': 'Tableplan — Catering-Planer',
+      'app.title': 'Event in a Box — Catering-Planer',
       'nav.primary': 'Hauptnavigation',
       'nav.planner': 'Planer',
       'nav.tools': 'Werkzeuge',
@@ -188,7 +188,7 @@
       'hero.eyebrow': 'Von der Gästezahl bis zum Einkauf',
       'hero.title.1': 'Event planen.',
       'hero.title.2': 'Den Rest berechnen wir.',
-      'hero.copy': 'Anlass, Ernährungsregeln, gewünschte Gerichte und vorhandenen Bestand festlegen. Tableplan erstellt daraus deterministisch ein Menü und eine Einkaufsliste auf Verpackungsebene.',
+      'hero.copy': 'Anlass, Ernährungsregeln, gewünschte Gerichte und vorhandenen Bestand festlegen. Event in a Box erstellt daraus deterministisch ein Menü und eine Einkaufsliste auf Verpackungsebene.',
       'event.title': 'Event-Grundlagen',
       'event.loading': 'Event-Vorlagen werden geladen…',
       'event.format': 'Event-Format',
@@ -214,7 +214,7 @@
       'stock.title': 'Bereits auf Lager',
       'stock.copy': 'Optional. Vorhandene Zutaten auswählen; der Bestand wird vor dem Aufrunden auf Verpackungen abgezogen.',
       'stock.add': '+ Bestand hinzufügen',
-      'stock.none': 'Kein vorhandener Bestand hinzugefügt.',
+      'stock.none': 'Noch kein vorhandener Bestand erfasst.',
       'stock.chooseIngredient': 'Zutat auswählen',
       'stock.searchCatalog': 'Katalog durchsuchen',
       'stock.change': 'Ändern',
@@ -337,7 +337,7 @@
       'catalog.unspecified': 'Nicht angegeben',
       'catalog.planningScores': 'Planungsbewertungen',
       'catalog.scoreFallback': 'Vom Katalog definierte Planungsbewertung.',
-      'footer.poc': 'TABLEPLAN POC',
+      'footer.poc': 'EVENT IN A BOX POC',
       'footer.copy': 'Erklärbar entwickelt · Preise in CHF',
       'unit.piece.one': 'Stück', 'unit.piece.many': 'Stück',
       'unit.serving.one': 'Portion', 'unit.serving.many': 'Portionen',
@@ -346,7 +346,7 @@
       'unit.liter.one': 'Liter', 'unit.liter.many': 'Liter'
     },
     fr: {
-      'app.title': 'Tableplan — Planificateur de catering',
+      'app.title': 'Event in a Box — Planificateur de catering',
       'nav.primary': 'Navigation principale',
       'nav.planner': 'Planificateur',
       'nav.tools': 'Outils',
@@ -354,7 +354,7 @@
       'hero.eyebrow': "Du nombre d'invités jusqu'aux achats",
       'hero.title.1': "Planifiez l'événement.",
       'hero.title.2': 'Nous calculons le reste.',
-      'hero.copy': "Définissez l'occasion, les contraintes alimentaires, les plats souhaités et le stock disponible. Tableplan fournit un menu déterministe et une liste d'achats au niveau des emballages.",
+      'hero.copy': "Définissez l'occasion, les contraintes alimentaires, les plats souhaités et le stock disponible. Event in a Box fournit un menu déterministe et une liste d'achats au niveau des emballages.",
       'event.title': "Informations sur l'événement",
       'event.loading': "Chargement des modèles d'événement…",
       'event.format': "Format de l'événement",
@@ -380,7 +380,7 @@
       'stock.title': 'Déjà en stock',
       'stock.copy': "Facultatif. Sélectionnez les ingrédients disponibles ; le stock est déduit avant l'arrondi aux emballages.",
       'stock.add': '+ Ajouter du stock',
-      'stock.none': 'Aucun stock existant ajouté.',
+      'stock.none': 'Aucun stock existant n’a été ajouté.',
       'stock.chooseIngredient': 'Choisir un ingrédient',
       'stock.searchCatalog': 'Rechercher dans le catalogue',
       'stock.change': 'Modifier',
@@ -503,7 +503,7 @@
       'catalog.unspecified': 'Non indiqué',
       'catalog.planningScores': 'Scores de planification',
       'catalog.scoreFallback': 'Score de planification défini par le catalogue.',
-      'footer.poc': 'TABLEPLAN POC',
+      'footer.poc': 'EVENT IN A BOX POC',
       'footer.copy': 'Explicable par conception · prix en CHF',
       'unit.piece.one': 'pièce', 'unit.piece.many': 'pièces',
       'unit.serving.one': 'portion', 'unit.serving.many': 'portions',
@@ -512,7 +512,7 @@
       'unit.liter.one': 'litre', 'unit.liter.many': 'litres'
     },
     it: {
-      'app.title': 'Tableplan — Pianificatore catering',
+      'app.title': 'Event in a Box — Pianificatore catering',
       'nav.primary': 'Navigazione principale',
       'nav.planner': 'Pianificatore',
       'nav.tools': 'Strumenti',
@@ -520,7 +520,7 @@
       'hero.eyebrow': 'Dal numero di ospiti agli acquisti',
       'hero.title.1': "Pianifica l'evento.",
       'hero.title.2': 'Al resto pensiamo noi.',
-      'hero.copy': "Imposta l'occasione, i vincoli alimentari, i piatti desiderati e le scorte disponibili. Tableplan restituisce un menu deterministico e una lista della spesa a livello di confezioni.",
+      'hero.copy': "Imposta l'occasione, i vincoli alimentari, i piatti desiderati e le scorte disponibili. Event in a Box restituisce un menu deterministico e una lista della spesa a livello di confezioni.",
       'event.title': "Dati dell'evento",
       'event.loading': "Caricamento dei modelli d'evento…",
       'event.format': "Formato dell'evento",
@@ -546,7 +546,7 @@
       'stock.title': 'Già disponibile',
       'stock.copy': 'Facoltativo. Seleziona gli ingredienti già disponibili; le scorte vengono sottratte prima di arrotondare alle confezioni.',
       'stock.add': '+ Aggiungi scorta',
-      'stock.none': 'Nessuna scorta esistente aggiunta.',
+      'stock.none': 'Nessuna scorta disponibile è stata aggiunta.',
       'stock.chooseIngredient': 'Scegli ingrediente',
       'stock.searchCatalog': 'Cerca nel catalogo',
       'stock.change': 'Cambia',
@@ -669,7 +669,7 @@
       'catalog.unspecified': 'Non specificato',
       'catalog.planningScores': 'Punteggi di pianificazione',
       'catalog.scoreFallback': 'Punteggio di pianificazione definito dal catalogo.',
-      'footer.poc': 'TABLEPLAN POC',
+      'footer.poc': 'EVENT IN A BOX POC',
       'footer.copy': 'Spiegabile per progettazione · prezzi in CHF',
       'unit.piece.one': 'pezzo', 'unit.piece.many': 'pezzi',
       'unit.serving.one': 'porzione', 'unit.serving.many': 'porzioni',
@@ -681,7 +681,7 @@
 
   // Current-branch wording overrides. Static UI copy is curated; catalog data still translates dynamically.
   Object.assign(messages.en, {
-    'hero.copy': 'Set the occasion, dietary guest counts, specific dishes and stock on hand. Tableplan returns a deterministic menu and package-level shopping list.',
+    'hero.copy': 'Set the occasion, dietary guest counts, specific dishes and stock on hand. Event in a Box returns a deterministic menu and package-level shopping list.',
     'constraints.title': 'Dietary guest counts',
     'constraints.copy': 'Enter how many guests need compatible servings. One dish may cover more than one dietary need.',
     'constraints.note': 'These counts set minimum serving coverage; they do not require every dish in the menu to match. Pinned dishes that do not cover an active need are clearly flagged.',
@@ -737,7 +737,7 @@
   });
 
   Object.assign(messages.de, {
-    'hero.copy': 'Anlass, Anzahl der Gäste mit Ernährungsbedürfnissen, gewünschte Gerichte und vorhandenen Bestand festlegen. Tableplan erstellt daraus deterministisch ein Menü und eine Einkaufsliste auf Verpackungsebene.',
+    'hero.copy': 'Anlass, Anzahl der Gäste mit Ernährungsbedürfnissen, gewünschte Gerichte und vorhandenen Bestand festlegen. Event in a Box erstellt daraus deterministisch ein Menü und eine Einkaufsliste auf Verpackungsebene.',
     'constraints.title': 'Ernährungsbedürfnisse',
     'constraints.copy': 'Geben Sie an, wie viele Gäste passende Portionen benötigen. Ein Gericht kann mehrere Bedürfnisse gleichzeitig abdecken.',
     'constraints.note': 'Die Zahlen definieren die minimale Abdeckung; nicht jedes Gericht muss zu jeder Ernährungsform passen. Angeheftete Gerichte ohne passende Abdeckung werden deutlich markiert.',
@@ -785,7 +785,7 @@
   });
 
   Object.assign(messages.fr, {
-    'hero.copy': "Définissez l’occasion, le nombre d’invités ayant des besoins alimentaires, les plats souhaités et le stock disponible. Tableplan fournit un menu déterministe et une liste d’achats par emballage.",
+    'hero.copy': "Définissez l’occasion, le nombre d’invités ayant des besoins alimentaires, les plats souhaités et le stock disponible. Event in a Box fournit un menu déterministe et une liste d’achats par emballage.",
     'constraints.title': 'Besoins alimentaires',
     'constraints.copy': 'Indiquez combien d’invités ont besoin de portions compatibles. Un même plat peut couvrir plusieurs besoins.',
     'constraints.note': 'Ces nombres définissent une couverture minimale ; tous les plats ne doivent pas respecter chaque besoin. Les plats épinglés incompatibles sont clairement signalés.',
@@ -833,7 +833,7 @@
   });
 
   Object.assign(messages.it, {
-    'hero.copy': 'Imposta l’occasione, il numero di ospiti con esigenze alimentari, i piatti desiderati e le scorte disponibili. Tableplan restituisce un menu deterministico e una lista della spesa a livello di confezione.',
+    'hero.copy': 'Imposta l’occasione, il numero di ospiti con esigenze alimentari, i piatti desiderati e le scorte disponibili. Event in a Box restituisce un menu deterministico e una lista della spesa a livello di confezione.',
     'constraints.title': 'Esigenze alimentari',
     'constraints.copy': 'Indica quanti ospiti necessitano di porzioni compatibili. Un piatto può coprire più esigenze contemporaneamente.',
     'constraints.note': 'I numeri definiscono la copertura minima; non tutti i piatti devono soddisfare ogni esigenza. I piatti fissati non compatibili vengono evidenziati chiaramente.',

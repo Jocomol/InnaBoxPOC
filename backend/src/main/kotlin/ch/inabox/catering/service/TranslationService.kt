@@ -289,7 +289,6 @@ class TranslationService(
                 .replace("Finger-Essen", "Fingerfood", ignoreCase = true)
                 .replace("vorbereiten im Voraus", "im Voraus vorbereiten", ignoreCase = true)
         }
-        if (context.contains("meal-name") && normalizePhrase(original) == "bircher müesli") return "Bircher Müesli"
         return value
     }
 
@@ -526,7 +525,7 @@ class TranslationService(
         "Falafel Bites" to mapOf("de" to "Falafel-Häppchen", "fr" to "Bouchées de falafel", "it" to "Bocconcini di falafel"),
         "Mini Ham Croissants" to mapOf("de" to "Mini-Schinkengipfeli", "fr" to "Mini-croissants au jambon", "it" to "Mini croissant al prosciutto"),
         "Halal Chicken Skewers" to mapOf("de" to "Halal-Hähnchenspiesse", "fr" to "Brochettes de poulet halal", "it" to "Spiedini di pollo halal"),
-        "Bircher Müesli" to mapOf("de" to "Bircher Müesli", "fr" to "Bircher Müesli", "it" to "Bircher Müesli"),
+        "Bircher Müesli" to mapOf("de" to "Bircher Müesli", "fr" to "Muesli Bircher aux pommes", "it" to "Muesli Bircher alla mela"),
         "Scrambled Eggs" to mapOf("de" to "Rührei", "fr" to "Œufs brouillés", "it" to "Uova strapazzate"),
         "Fruit Salad" to mapOf("de" to "Obstsalat", "fr" to "Salade de fruits", "it" to "Macedonia di frutta"),
         "Apple Yogurt Parfaits" to mapOf("de" to "Apfel-Joghurt-Parfaits", "fr" to "Parfaits pomme-yaourt", "it" to "Parfait mela e yogurt"),
