@@ -31,7 +31,11 @@ class PlanningController(private val planningService: PlanningService) {
         summary = "Resolve a catering plan",
         description = """Builds a deterministic plan from the selected template and the current catalog.
 
-Resolution loads the template and scoring-priority defaults, merges and normalizes weight overrides, applies capability constraints, ranks the remaining candidates, expands meals into ingredient needs, enforces concept exclusions while selecting products, consumes compatible inventory, rounds net requirements to whole product packages, and calculates budget totals. Repeating the request against an unchanged catalog returns the same selections.
+Resolution loads the template and scoring-priority defaults, resolves the requested or template-default dish count, applies event/menu hard constraints, ranks valid candidates, and allocates exact total servings across the selected meals. Dietary coverage is evaluated separately through `dietaryShares`, so a dietary request does not become a global hard filter on every dish. Overlapping dietary shares are supported and do not need to sum to 1.
+
+The canonical `dietaryShares` field wins whenever it is present, including `{}`. If it is omitted, the resolver falls back to deprecated `capabilityShares`, then legacy `selectedConstraintIds` and `preferences.vegetarianShare`. A dietary shortfall makes a meal-like plan (at most two servings per guest) unresolvable; snack-style plans return the best allocation with a warning.
+
+Selected meals are expanded into ingredient needs, excluded concepts are enforced while products are selected, compatible inventory is consumed, remaining needs are rounded to whole product packages, and budget totals are calculated. Repeating the request against an unchanged catalog returns the same selections.
 
 The budget is informational: an over-budget result is returned with a warning and `totals.budgetStatus` set to `OVER_BUDGET`.""",
     )
@@ -44,7 +48,7 @@ The budget is informational: an over-budget result is returned with a warning an
             ),
             ApiResponse(
                 responseCode = "400",
-                description = "The JSON body, bean-validation constraints, hard-constraint combination, priority IDs, or weight values are invalid.",
+                description = "The JSON body, bean-validation constraints, meal count, dietary share values, hard-constraint combination, priority IDs, or weight values are invalid.",
                 content = [
                     Content(
                         mediaType = "application/problem+json",
@@ -80,7 +84,7 @@ The budget is informational: an over-budget result is returned with a warning an
             ),
             ApiResponse(
                 responseCode = "422",
-                description = "The request is valid, but required meals, hard constraints, template requirements, or purchasable products make the plan impossible to resolve.",
+                description = "The request is valid, but required meals, hard constraints, mandatory template requirements, a meal-like dietary shortfall, or purchasable products make the plan impossible to resolve.",
                 content = [
                     Content(
                         mediaType = "application/problem+json",
@@ -99,7 +103,7 @@ The budget is informational: an over-budget result is returned with a warning an
     fun resolve(
         @Valid
         @OpenApiRequestBody(
-            description = "Event inputs and optional overrides. Only `templateId`, `guestCount`, and `budget` are required.",
+            description = "Event inputs and optional overrides. Only `templateId`, `guestCount`, and `budget` are required. Prefer `dietaryShares` over deprecated compatibility fields.",
             required = true,
             content = [
                 Content(
@@ -107,16 +111,20 @@ The budget is informational: an over-budget result is returned with a warning an
                     schema = Schema(implementation = ResolvePlanRequest::class),
                     examples = [
                         ExampleObject(
-                            name = "Business apéro for 40 guests",
-                            summary = "Uses only IDs and concepts present in the seeded mock catalog",
+                            name = "Mixed-dietary team lunch",
+                            summary = "Canonical dish-count and dietary-share request using the seeded catalog",
                             value = """{
-  "templateId": "business-apero",
+  "templateId": "team-lunch-buffet",
   "guestCount": 40,
-  "budget": 800,
-  "servingsPerGuest": 4,
-  "requiredMealIds": ["mini-spinach-quiche"],
+  "budget": 1600,
+  "servingsPerGuest": 1,
+  "mealCount": 3,
+  "dietaryShares": {
+    "vegetarian": 0.25,
+    "halal": 0.15,
+    "gluten-free": 0.1
+  },
   "preferences": {
-    "vegetarianShare": 0.3,
     "preferredCapabilities": ["prepare-ahead"]
   },
   "weights": {
@@ -127,13 +135,25 @@ The budget is informational: an over-budget result is returned with a warning an
     "sustainability": 0.1
   },
   "availableInventory": [
-    {"concept": "mini-spinach-quiche", "amount": 40, "unit": "piece"}
+    {"concept": "rice", "amount": 1000, "unit": "g"}
   ],
   "hardConstraints": {
     "requiredCapabilities": [],
     "excludedCapabilities": [],
     "excludedConcepts": []
   }
+}""",
+                        ),
+                        ExampleObject(
+                            name = "Business apéro",
+                            summary = "Minimal request with a guaranteed seeded dish",
+                            value = """{
+  "templateId": "business-apero",
+  "guestCount": 40,
+  "budget": 800,
+  "servingsPerGuest": 4,
+  "mealCount": 5,
+  "requiredMealIds": ["mini-spinach-quiche"]
 }""",
                         ),
                     ],

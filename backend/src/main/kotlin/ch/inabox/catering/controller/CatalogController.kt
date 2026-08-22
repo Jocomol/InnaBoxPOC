@@ -13,6 +13,7 @@ import ch.inabox.catering.repository.PlanningPriorityRepository
 import ch.inabox.catering.repository.ProductRepository
 import ch.inabox.catering.service.CatalogMetadataService
 import ch.inabox.catering.service.InventoryCatalogService
+import ch.inabox.catering.service.InventoryConceptOption
 import ch.inabox.catering.service.MealCatalogService
 import ch.inabox.catering.service.effectivePlanningPriorities
 import ch.inabox.catering.service.TemplateNotFoundException
@@ -97,7 +98,7 @@ class CatalogController(
     @Operation(
         operationId = "listMeals",
         summary = "List meals",
-        description = "Returns every seeded meal ordered by `id`, including matching capabilities, serving size, ingredient recipe, and normalized planning scores.",
+        description = "Returns every seeded meal ordered by `id`, including separate event/menu and dietary capabilities, serving size, ingredient recipe, and normalized planning scores.",
     )
     @ApiResponse(
         responseCode = "200",
@@ -107,27 +108,71 @@ class CatalogController(
     fun meals(): List<Meal> = mealRepository.findAll().sortedBy { it.mealId }
 
     @GetMapping("/meals/search")
+    @Operation(
+        operationId = "searchMeals",
+        summary = "Search meals",
+        description = "Searches meal name, ID, event/menu capabilities, dietary capabilities, and ingredient concepts. Optional category and event/menu capability filters are combined with the text query. Results are ordered by name and limited to 1–100 entries; `capability` does not filter dietary tags.",
+    )
+    @ApiResponse(
+        responseCode = "200",
+        description = "Matching meals ordered by name.",
+        content = [Content(mediaType = "application/json", array = ArraySchema(schema = Schema(implementation = Meal::class)))],
+    )
     fun searchMeals(
+        @Parameter(description = "Case-insensitive text matched against meal fields.", example = "quinoa")
         @RequestParam(required = false) query: String?,
+        @Parameter(description = "Category ID returned by `GET /api/meal-categories`.", example = "lunch")
         @RequestParam(required = false) categoryId: String?,
+        @Parameter(description = "Event/menu capability returned by `GET /api/meal-capabilities`.", example = "buffet")
         @RequestParam(required = false) capability: String?,
+        @Parameter(description = "Maximum number of results. Values are clamped to 1–100.", example = "40")
         @RequestParam(defaultValue = "40") limit: Int,
     ): List<Meal> = mealCatalogService.search(query, categoryId, capability, limit)
 
     @GetMapping("/meal-categories")
+    @Operation(
+        operationId = "listMealCategories",
+        summary = "List meal categories",
+        description = "Returns browse categories in display order. Category IDs can be passed to the meal-search endpoint.",
+    )
+    @ApiResponse(
+        responseCode = "200",
+        description = "Configured meal categories in display order.",
+        content = [Content(mediaType = "application/json", array = ArraySchema(schema = Schema(implementation = MealCategory::class)))],
+    )
     fun mealCategories(): List<MealCategory> = catalogMetadataService.mealCategories()
 
     @GetMapping("/meal-capabilities")
+    @Operation(
+        operationId = "listMealCapabilities",
+        summary = "List event and menu capabilities",
+        description = "Returns distinct meal `capabilities` used for event suitability and search filtering. Dietary values are intentionally excluded and are discoverable through `GET /api/dietary-constraints`.",
+    )
+    @ApiResponse(
+        responseCode = "200",
+        description = "Sorted distinct event/menu capability IDs.",
+        content = [Content(mediaType = "application/json", array = ArraySchema(schema = Schema(type = "string", example = "buffet")))],
+    )
     fun mealCapabilities(): List<String> = mealCatalogService.capabilities()
 
     @GetMapping("/dietary-constraints")
+    @Operation(
+        operationId = "listDietaryConstraints",
+        summary = "List dietary options",
+        description = "Returns dietary allocation metadata in display order. Use each entry's `dietaryCapability` as a key in `dietaryShares`; the seeded catalog currently includes vegetarian, vegan, halal, gluten-free, lactose-free, and nut-free.",
+    )
+    @ApiResponse(
+        responseCode = "200",
+        description = "Configured dietary options in display order.",
+        content = [Content(mediaType = "application/json", array = ArraySchema(schema = Schema(implementation = DietaryConstraintDefinition::class)))],
+    )
     fun dietaryConstraints(): List<DietaryConstraintDefinition> = catalogMetadataService.dietaryConstraints()
 
     @GetMapping("/products")
     @Operation(
         operationId = "listProducts",
         summary = "List products",
-        description = "Returns every seeded purchasable product ordered by `id`, including package size, price, origin, capabilities, scores, and any serving conversion.",
+        description = "Returns every seeded purchasable product ordered by `id`, including package size, price, origin, separate product-function and dietary capabilities, scores, and any serving conversion.",
     )
     @ApiResponse(
         responseCode = "200",
@@ -137,8 +182,20 @@ class CatalogController(
     fun products(): List<Product> = productRepository.findAll().sortedBy { it.productId }
 
     @GetMapping("/inventory-concepts/search")
+    @Operation(
+        operationId = "searchInventoryConcepts",
+        summary = "Search inventory concepts",
+        description = "Searches product concept, name, and SKU, then returns one option per distinct concept. The returned concept and suggested unit can be copied into `availableInventory`.",
+    )
+    @ApiResponse(
+        responseCode = "200",
+        description = "Distinct matching inventory concepts ordered by concept and product name.",
+        content = [Content(mediaType = "application/json", array = ArraySchema(schema = Schema(implementation = InventoryConceptOption::class)))],
+    )
     fun inventoryConcepts(
+        @Parameter(description = "Case-insensitive product concept, name, or SKU text.", example = "quiche")
         @RequestParam(required = false) query: String?,
+        @Parameter(description = "Maximum number of distinct concepts. Values are clamped to 1–100.", example = "40")
         @RequestParam(defaultValue = "40") limit: Int,
     ) = inventoryCatalogService.search(query, limit)
 

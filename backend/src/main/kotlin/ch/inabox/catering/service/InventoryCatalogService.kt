@@ -1,6 +1,7 @@
 package ch.inabox.catering.service
 
 import ch.inabox.catering.model.Product
+import io.swagger.v3.oas.annotations.media.Schema
 import org.springframework.data.domain.Sort
 import org.springframework.data.mongodb.core.MongoTemplate
 import org.springframework.data.mongodb.core.query.Criteria
@@ -8,9 +9,13 @@ import org.springframework.data.mongodb.core.query.Query
 import org.springframework.stereotype.Service
 import java.util.regex.Pattern
 
+@Schema(description = "Distinct product concept offered as an existing-inventory input option.")
 data class InventoryConceptOption(
+    @field:Schema(description = "Canonical concept value accepted by `availableInventory[].concept`.", example = "mini-spinach-quiche")
     val concept: String,
+    @field:Schema(description = "Human-readable label derived from the concept.", example = "Mini Spinach Quiche")
     val label: String,
+    @field:Schema(description = "Package unit suggested for the inventory amount.", example = "piece")
     val suggestedUnit: String,
 )
 

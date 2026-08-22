@@ -10,12 +10,17 @@ data class Quantity(
     val unit: String,
 )
 
+@Schema(description = "Dietary metadata corresponding to an effective request share. Unknown ad-hoc share keys have no metadata entry here.")
 data class AppliedDietaryConstraint(
+    @field:Schema(description = "Stable dietary constraint ID.", example = "gluten-free")
     val id: String,
+    @field:Schema(example = "Gluten-free")
     val label: String,
+    @field:Schema(description = "Catalog explanation of the dietary allocation option.")
     val description: String,
 )
 
+@Schema(description = "Resolved request context and the effective planning inputs used to build the response.")
 data class EventSummary(
     @field:Schema(example = "business-apero")
     val templateId: String,
@@ -27,6 +32,7 @@ data class EventSummary(
     val servingsPerGuest: Int?,
     @field:Schema(description = "Guaranteed meal IDs from the request.", example = "[\"mini-spinach-quiche\"]")
     val requiredMealIds: Set<String>,
+    @field:Schema(description = "Catalog dietary definitions corresponding to keys in the effective `dietaryShares` map.")
     val selectedConstraints: List<AppliedDietaryConstraint>,
     val budget: Money,
     @field:Schema(
@@ -36,7 +42,16 @@ data class EventSummary(
     val appliedWeights: Map<String, Double>,
     val preferences: CustomerPreferences,
     val hardConstraints: HardConstraints,
+    @field:Schema(
+        description = "Effective desired number of distinct dishes after applying the request override or template default. Null means neither supplied a value.",
+        example = "3",
+        minimum = "1",
+    )
     val mealCount: Int? = null,
+    @field:Schema(
+        description = "Effective dietary share map after compatibility-field precedence, key trimming, lower-casing, and duplicate-key consolidation.",
+        example = "{\"vegetarian\":0.2,\"halal\":0.3}",
+    )
     val dietaryShares: Map<String, Double> = emptyMap(),
 )
 
@@ -59,14 +74,27 @@ data class SelectedMeal(
     val scoreComponents: Map<String, Double>,
     @field:Schema(description = "Normalized weighted score used to rank valid candidates.", example = "0.7625", minimum = "0", maximum = "1")
     val finalWeightedScore: Double,
+    @field:Schema(description = "True when the dish was explicitly requested through `requiredMealIds`.", example = "false")
     val guaranteed: Boolean = false,
+    @field:Schema(
+        description = "Requested positive dietary-share keys supported by this meal. This is explanatory; serving coverage is evaluated across the complete allocation.",
+        example = "[\"vegetarian\",\"gluten-free\"]",
+    )
     val matchedDietaryCapabilities: Set<String> = emptySet(),
 )
 
+@Schema(
+    description = "Compatibility shape for historical per-meal dietary conflicts. Current planning reports aggregate dietary shortfalls as warnings or a 422 response, so this list is normally empty.",
+    deprecated = true,
+)
 data class ConstraintConflict(
+    @field:Schema(example = "mini-spinach-quiche")
     val mealId: String,
+    @field:Schema(example = "Mini Spinach Quiche")
     val mealName: String,
+    @field:Schema(example = "vegan")
     val constraintId: String,
+    @field:Schema(example = "Vegan")
     val constraintLabel: String,
     val guaranteed: Boolean,
     val missingRequiredCapabilities: Set<String> = emptySet(),
@@ -154,6 +182,10 @@ data class PlanTotals(
 data class ShoppingPlan(
     val event: EventSummary,
     val selectedMeals: List<SelectedMeal>,
+    @field:Schema(
+        description = "Deprecated per-meal conflict list retained for response compatibility. Aggregate dietary shortfalls are exposed through `warnings` or HTTP 422.",
+        deprecated = true,
+    )
     val constraintConflicts: List<ConstraintConflict>,
     val fulfilledRequirements: List<FulfilledRequirement>,
     val ingredientRequirements: List<IngredientRequirement>,
@@ -163,6 +195,6 @@ data class ShoppingPlan(
     @field:Schema(description = "Inventory quantities left after all matching requirements are processed.")
     val unusedExistingInventory: List<InventoryUsage>,
     val totals: PlanTotals,
-    @field:Schema(description = "Non-fatal issues such as an optional unmet requirement or a budget overrun.")
+    @field:Schema(description = "Non-fatal issues such as an optional unmet requirement, a snack-style dietary shortfall, an unavailable desired dish count, or a budget overrun.")
     val warnings: List<String>,
 )

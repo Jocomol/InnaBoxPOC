@@ -64,25 +64,46 @@ data class PlanningPriority(
 )
 
 @Document("dietaryConstraints")
+@Schema(description = "User-facing dietary option that maps a stable constraint ID to the meal dietary capability used for serving allocation.")
 data class DietaryConstraintDefinition(
     @Id @get:JsonIgnore val mongoId: ObjectId? = null,
-    @Field("id") @get:JsonProperty("id") val constraintId: String,
+    @Field("id")
+    @get:JsonProperty("id")
+    @field:Schema(description = "Stable ID used by legacy `selectedConstraintIds` requests.", example = "gluten-free")
+    val constraintId: String,
+    @field:Schema(description = "Human-readable dietary option.", example = "Gluten-free")
     val label: String,
+    @field:Schema(description = "Explanation shown alongside the dietary guest-count input.")
     val description: String,
+    @field:Schema(description = "Ascending UI display order.", example = "40")
     val displayOrder: Int = 0,
     // Legacy metadata retained while existing Mongo volumes are upgraded.
+    @field:Schema(description = "Legacy capability mapping retained for older catalog volumes.", deprecated = true)
     val requiredCapabilities: Set<String> = emptySet(),
+    @field:Schema(description = "Legacy exclusion metadata retained for compatibility.", deprecated = true)
     val excludedCapabilities: Set<String> = emptySet(),
+    @field:Schema(description = "Legacy concept-exclusion metadata retained for compatibility.", deprecated = true)
     val excludedConcepts: Set<String> = emptySet(),
+    @field:Schema(
+        description = "Canonical key used in `dietaryShares` and matched against `Meal.dietaryCapabilities`. Seeded definitions always provide it; null supports older catalog volumes.",
+        example = "gluten-free",
+    )
     val dietaryCapability: String? = null,
 )
 
 @Document("mealCategories")
+@Schema(description = "Browse category used by meal catalog search and the frontend picker.")
 data class MealCategory(
     @Id @get:JsonIgnore val mongoId: ObjectId? = null,
-    @Field("id") @get:JsonProperty("id") val categoryId: String,
+    @Field("id")
+    @get:JsonProperty("id")
+    @field:Schema(description = "Stable category ID accepted by the meal-search `categoryId` parameter.", example = "lunch")
+    val categoryId: String,
+    @field:Schema(example = "Lunch & Buffet")
     val label: String,
+    @field:Schema(description = "Short explanation of the meals grouped under this category.")
     val description: String = "",
+    @field:Schema(description = "Ascending UI display order.", example = "60")
     val displayOrder: Int = 0,
 )
 
@@ -99,8 +120,8 @@ data class EventTemplate(
     @field:Schema(description = "Short description of the event format.")
     val description: String,
     @field:Schema(
-        description = "Template-specific numeric defaults such as duration and vegetarian share.",
-        example = "{\"durationMinutes\":120,\"vegetarianShare\":0.3}",
+        description = "Template-specific numeric defaults. The seeded templates provide `durationMinutes` and `mealCount`; dietary shares are request-specific and are not stored here.",
+        example = "{\"durationMinutes\":120,\"mealCount\":5}",
     )
     val defaults: Map<String, Double> = emptyMap(),
     val requirements: List<TemplateRequirement> = emptyList(),
@@ -137,10 +158,11 @@ data class Meal(
     val mealId: String,
     @field:Schema(description = "Human-readable dish name.", example = "Caprese Skewers")
     val name: String,
+    @field:Schema(description = "Browse-category IDs from `GET /api/meal-categories`.", example = "[\"plant-based\",\"reception\"]")
     val categoryIds: Set<String> = emptySet(),
     @field:Schema(
-        description = "Traits used for requirement matching, hard filtering, and preference tie-breaking.",
-        example = "[\"vegetarian\",\"savory\",\"finger-food\",\"cold\",\"apero\",\"prepare-ahead\"]",
+        description = "Event/menu traits used for template matching, hard filtering, and preference tie-breaking. Dietary compatibility is kept separately in `dietaryCapabilities`.",
+        example = "[\"savory\",\"finger-food\",\"cold\",\"apero\",\"prepare-ahead\"]",
     )
     val capabilities: Set<String> = emptySet(),
     val serving: ServingInfo = ServingInfo(),
@@ -150,6 +172,10 @@ data class Meal(
         example = "{\"price\":0.65,\"swiss\":1,\"presentation\":0.9,\"prepEase\":0.6,\"sustainability\":0.75}",
     )
     val scores: Map<String, Double> = emptyMap(),
+    @field:Schema(
+        description = "Positive dietary compatibility tags used to allocate requested serving shares.",
+        example = "[\"vegetarian\",\"gluten-free\"]",
+    )
     val dietaryCapabilities: Set<String> = emptySet(),
 )
 
@@ -197,7 +223,10 @@ data class Product(
     val originCountry: String? = null,
     @Field("package") @get:JsonProperty("package") val packageInfo: PackageInfo,
     val price: Money,
-    @field:Schema(description = "Traits used for direct product requirements and hard filtering.", example = "[\"vegetarian\"]")
+    @field:Schema(
+        description = "Product-function traits used for direct template requirements and hard filtering. Dietary compatibility is kept separately in `dietaryCapabilities`.",
+        example = "[\"finger-food\",\"ready-to-heat\"]",
+    )
     val capabilities: Set<String> = emptySet(),
     @field:Schema(
         description = "Normalized desirability scores keyed by planning-priority ID; 1.0 is always most desirable.",
@@ -206,5 +235,9 @@ data class Product(
     val scores: Map<String, Double> = emptyMap(),
     @field:Schema(description = "Optional conversion used when a requirement is expressed in servings rather than the package unit.")
     val conversion: ProductConversion? = null,
+    @field:Schema(
+        description = "Positive dietary compatibility tags carried by this product fixture.",
+        example = "[\"vegetarian\",\"gluten-free\"]",
+    )
     val dietaryCapabilities: Set<String> = emptySet(),
 )

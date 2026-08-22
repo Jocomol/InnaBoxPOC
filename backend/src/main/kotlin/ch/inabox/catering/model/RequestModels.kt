@@ -10,15 +10,16 @@ import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Positive
 import jakarta.validation.constraints.PositiveOrZero
 
-@Schema(description = "Soft customer preferences used as scoring tie-breakers or template-share overrides.")
+@Schema(description = "Soft customer preferences used as scoring tie-breakers. The vegetarian share is retained only as a compatibility alias.")
 data class CustomerPreferences(
     @field:DecimalMin("0.0")
     @field:DecimalMax("1.0")
     @field:Schema(
-        description = "Preferred vegetarian share for template requirements that define a vegetarian share. Null keeps the template value.",
+        description = "Deprecated compatibility alias for `dietaryShares.vegetarian`. It is considered only when `dietaryShares` and `capabilityShares` are omitted and no selected dietary constraint already supplies vegetarian coverage.",
         example = "0.3",
         minimum = "0",
         maximum = "1",
+        deprecated = true,
         requiredMode = Schema.RequiredMode.NOT_REQUIRED,
     )
     val vegetarianShare: Double? = null,
@@ -57,11 +58,11 @@ data class InventoryItem(
     val unit: String,
 )
 
-@Schema(description = "Mandatory filters. Capability and concept values are trimmed and compared case-insensitively.")
+@Schema(description = "Mandatory event/menu and ingredient filters. Values are trimmed and compared case-insensitively; use `dietaryShares` for dietary coverage.")
 data class HardConstraints(
     @field:Schema(
-        description = "Every selected meal must contain all of these capabilities.",
-        example = "[\"vegan\"]",
+        description = "Every selected meal, including explicitly required meals, must contain all of these event/menu capabilities.",
+        example = "[\"prepare-ahead\"]",
         requiredMode = Schema.RequiredMode.NOT_REQUIRED,
     )
     val requiredCapabilities: Set<String> = emptySet(),
@@ -122,17 +123,48 @@ data class ResolvePlanRequest(
         requiredMode = Schema.RequiredMode.NOT_REQUIRED,
     )
     val requiredMealIds: Set<String> = emptySet(),
+    @field:Schema(
+        description = "Deprecated dietary-constraint IDs from `GET /api/dietary-constraints`. Each selected ID becomes a 100% dietary share when both share-map fields are omitted. Unknown IDs are rejected.",
+        example = "[\"vegetarian\"]",
+        deprecated = true,
+        requiredMode = Schema.RequiredMode.NOT_REQUIRED,
+    )
     val selectedConstraintIds: Set<String> = emptySet(),
-    @field:Valid val preferences: CustomerPreferences = CustomerPreferences(),
+    @field:Valid
+    @field:Schema(requiredMode = Schema.RequiredMode.NOT_REQUIRED)
+    val preferences: CustomerPreferences = CustomerPreferences(),
+    @field:Schema(
+        description = "Per-priority overrides in the range 0.0–1.0. Overrides are merged with database and template defaults, then normalized to sum to 1. Unknown priority IDs are rejected.",
+        example = "{\"price\":0.3,\"swiss\":0.25,\"presentation\":0.2,\"prepEase\":0.15,\"sustainability\":0.1}",
+        requiredMode = Schema.RequiredMode.NOT_REQUIRED,
+    )
     val weights: Map<String, Double> = emptyMap(),
     @field:Valid
     @field:Schema(requiredMode = Schema.RequiredMode.NOT_REQUIRED)
     val availableInventory: List<InventoryItem> = emptyList(),
     @field:Schema(requiredMode = Schema.RequiredMode.NOT_REQUIRED)
     val hardConstraints: HardConstraints = HardConstraints(),
-    @field:Positive val mealCount: Int? = null,
+    @field:Positive
+    @field:Schema(
+        description = "Desired number of distinct dishes. When omitted, the template's `defaults.mealCount` is used. Required meals and mandatory requirements can force more dishes; if fewer valid dishes exist, the available count is returned with a warning.",
+        example = "3",
+        minimum = "1",
+        requiredMode = Schema.RequiredMode.NOT_REQUIRED,
+    )
+    val mealCount: Int? = null,
     // Null means the canonical field was omitted; an explicitly supplied empty map still overrides aliases.
+    @field:Schema(
+        description = "Canonical dietary coverage map. Keys are dietary capability IDs and values are independent shares of total food servings in the range 0.0–1.0; overlapping shares do not need to sum to 1. This field takes precedence whenever present, including an explicit empty object.",
+        example = "{\"vegetarian\":0.2,\"halal\":0.3,\"gluten-free\":0.1}",
+        requiredMode = Schema.RequiredMode.NOT_REQUIRED,
+    )
     val dietaryShares: Map<String, Double>? = null,
     // Compatibility alias. dietaryShares takes precedence when both are supplied.
+    @field:Schema(
+        description = "Deprecated compatibility alias for `dietaryShares`. It is used only when the canonical field is omitted and this map is non-empty.",
+        example = "{\"vegetarian\":0.2}",
+        deprecated = true,
+        requiredMode = Schema.RequiredMode.NOT_REQUIRED,
+    )
     val capabilityShares: Map<String, Double> = emptyMap(),
 )
