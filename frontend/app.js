@@ -455,9 +455,13 @@ function renderWeights(weights) {
     `;
   }).join('');
   document.querySelectorAll('.weight-input').forEach(input => {
-    input.addEventListener('input', () => {
-      input.closest('.weight').querySelector('output').value = `${Math.round(Number(input.value) * 100)}%`;
-    });
+    const syncSlider = () => {
+      const percentage = Math.round(Number(input.value) * 100);
+      input.style.setProperty('--range-progress', `${percentage}%`);
+      input.closest('.weight').querySelector('output').value = `${percentage}%`;
+    };
+    syncSlider();
+    input.addEventListener('input', syncSlider);
   });
 }
 

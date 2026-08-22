@@ -4,7 +4,8 @@
     "Expected dietary shares are minimum shares of allocated servings, not exact shares.",
     "Dietary shares may overlap. A serving from a meal tagged both vegetarian and halal counts toward both targets.",
     "For weighting isolation scenarios, every planning-priority key is sent so template/database defaults cannot influence the result.",
-    "Exact total cost is not asserted in the weighting scenarios because package rounding and unrelated template product requirements can legitimately affect it."
+    "Exact total cost is not asserted in the weighting scenarios because package rounding and unrelated template product requirements can legitimately affect it.",
+    "Business Apero winners include the expanded replacement catalog used to exercise pin, remove, and regenerate."
   ],
   "scenarios": [
     {
@@ -77,8 +78,8 @@
       },
       "expect": {
         "status": 200,
-        "selectedMealIds": ["caprese-skewers"],
-        "selectedMealFinalWeightedScore": 0.90
+        "selectedMealIds": ["smoked-salmon-cucumber-bites"],
+        "selectedMealFinalWeightedScore": 0.96
       }
     },
     {
@@ -100,8 +101,8 @@
       },
       "expect": {
         "status": 200,
-        "selectedMealIds": ["falafel-bites"],
-        "selectedMealFinalWeightedScore": 0.90
+        "selectedMealIds": ["vegetable-antipasti-skewers"],
+        "selectedMealFinalWeightedScore": 0.94
       }
     },
     {
@@ -130,13 +131,13 @@
           "prepEase": 0.0,
           "sustainability": 0.0
         },
-        "selectedMealIds": ["halal-chicken-skewers"],
-        "selectedMealFinalWeightedScore": 0.832
+        "selectedMealIds": ["hummus-stuffed-mini-peppers"],
+        "selectedMealFinalWeightedScore": 0.887
       }
     },
     {
-      "id": "halal-share-beats-swiss-preference",
-      "purpose": "Verify a required dietary share takes precedence over a conflicting scoring priority.",
+      "id": "halal-share-with-swiss-preference",
+      "purpose": "Verify a required dietary share remains hard while Swiss weighting chooses a compatible Swiss alternative.",
       "request": {
         "templateId": "business-apero",
         "guestCount": 10,
@@ -156,12 +157,11 @@
       },
       "expect": {
         "status": 200,
-        "selectedMealIds": ["falafel-bites"],
+        "selectedMealIds": ["mini-roesti-bites"],
         "totalMealServings": 10,
         "minimumDietaryServings": {
           "halal": 10
         },
-        "selectedMealMayHaveLowerSwissScoreThanRejectedCandidates": true,
         "noDietaryShortfallWarning": true
       }
     },

@@ -56,7 +56,7 @@ dietary_servings() {
 echo "Checking seeded catalog through ${API_BASE_URL}..."
 curl --silent --show-error --fail --max-time 15 \
   "${API_BASE_URL}/api/meals" > "${TEST_TMP_DIR}/meals.json"
-jq -e 'length >= 19' "${TEST_TMP_DIR}/meals.json" >/dev/null ||
+jq -e 'length >= 33' "${TEST_TMP_DIR}/meals.json" >/dev/null ||
   fail "seeded meal catalog is unavailable or incomplete"
 
 two_meals="$(resolve_plan two-meals '{
@@ -105,14 +105,41 @@ pin_reject_payload="$(jq -cn \
 pin_reject_plan="$(resolve_plan pin-reject "${pin_reject_payload}")"
 
 jq -e --arg pinned "${pinned_meal_id}" --arg rejected "${rejected_meal_id}" '
-  (.selectedMeals | length) as $selectedCount |
-  ($selectedCount >= 4 and $selectedCount <= 5) and
+  (.selectedMeals | length == 5) and
   (any(.selectedMeals[]; .mealId == $pinned and .guaranteed == true)) and
   (all(.selectedMeals[]; .mealId != $rejected)) and
   (.event.requiredMealIds == [$pinned]) and
-  (.event.excludedMealIds == [$rejected]) and
-  ($selectedCount == 5 or any(.warnings[]; contains("Requested 5 distinct meals")))
-' "${pin_reject_plan}" >/dev/null || fail "pin/reject regeneration did not preserve pin/exclusion and fallback semantics"
+  (.event.excludedMealIds == [$rejected])
+' "${pin_reject_plan}" >/dev/null || fail "pin/reject regeneration did not preserve the pin, exclusion, and five-meal replacement"
+
+initial_meal_ids="$(jq -c '[.selectedMeals[].mealId]' "${five_meals}")"
+multi_rejected_meal_ids="$(jq -c '[.selectedMeals[1:4][].mealId]' "${five_meals}")"
+multi_pin_reject_payload="$(jq -cn \
+  --arg pinned "${pinned_meal_id}" \
+  --argjson rejected "${multi_rejected_meal_ids}" \
+  '{
+    templateId: "business-apero",
+    guestCount: 100,
+    budget: 10000,
+    servingsPerGuest: 4,
+    mealCount: 5,
+    dietaryShares: {vegetarian: 0.30, vegan: 0.20},
+    requiredMealIds: [$pinned],
+    excludedMealIds: $rejected
+  }')"
+multi_pin_reject_plan="$(resolve_plan multi-pin-reject "${multi_pin_reject_payload}")"
+
+jq -e \
+  --arg pinned "${pinned_meal_id}" \
+  --argjson rejected "${multi_rejected_meal_ids}" \
+  --argjson initial "${initial_meal_ids}" '
+    (.selectedMeals | length == 5) and
+    (any(.selectedMeals[]; .mealId == $pinned and .guaranteed == true)) and
+    (all(.selectedMeals[]; .mealId as $mealId | ($rejected | index($mealId) | not))) and
+    ((.event.excludedMealIds | sort) == ($rejected | sort)) and
+    ([.selectedMeals[].mealId] - $initial | length >= 3)
+  ' "${multi_pin_reject_plan}" >/dev/null ||
+  fail "pinning one meal and removing three did not produce three real replacements"
 
 overlap_payload="$(jq -cn --arg meal "${pinned_meal_id}" '{
   templateId: "business-apero",
@@ -255,6 +282,6 @@ echo "  - meal-like vegetarian servings: ${vegetarian_meal_servings}/100"
 echo "  - snack vegetarian servings: ${vegetarian_snack_servings}/400"
 echo "  - snack vegan servings: ${vegan_snack_servings}/400"
 echo "  - impossible dietary-share warning/failure behavior"
-echo "  - pin/reject regeneration, overlap validation, and unknown exclusion validation"
+echo "  - pin/reject regeneration with one and three exclusions, overlap validation, and unknown exclusion validation"
 echo "  - legacy request compatibility"
 echo "  - compatibility aliases and canonical precedence"

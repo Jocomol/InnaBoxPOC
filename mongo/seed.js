@@ -1178,6 +1178,7 @@ const meals = [
       "savory",
       "finger-food",
       "reception",
+      "apero",
       "prepare-ahead"
     ],
     serving: {
@@ -1221,6 +1222,7 @@ const meals = [
       "finger-food",
       "cold",
       "reception",
+      "apero",
       "prepare-ahead"
     ],
     serving: {
@@ -1566,6 +1568,7 @@ const meals = [
       "finger-food",
       "cold",
       "reception",
+      "apero",
       "prepare-ahead"
     ],
     serving: {
@@ -1606,6 +1609,7 @@ const meals = [
       "finger-food",
       "cold",
       "reception",
+      "apero",
       "prepare-ahead"
     ],
     serving: {
@@ -1629,6 +1633,252 @@ const meals = [
       presentation: 0.92,
       prepEase: 0.68,
       sustainability: 0.91
+    },
+    dietaryCapabilities: [
+      "vegan",
+      "vegetarian",
+      "halal",
+      "gluten-free",
+      "lactose-free",
+      "nut-free"
+    ]
+  },
+
+  {
+    id: "mini-roesti-bites",
+    name: "Swiss Mini Rösti Bites",
+    categoryIds: ["plant-based", "reception"],
+    capabilities: [
+      "savory",
+      "finger-food",
+      "warm",
+      "apero",
+      "reception"
+    ],
+    serving: {
+      piecesPerServing: 2
+    },
+    ingredients: [
+      {
+        concept: "mini-roesti",
+        amountPerServing: 2,
+        unit: "piece"
+      }
+    ],
+    scores: {
+      price: 0.76,
+      swiss: 1,
+      presentation: 0.82,
+      prepEase: 0.9,
+      sustainability: 0.78
+    },
+    dietaryCapabilities: [
+      "vegan",
+      "vegetarian",
+      "halal",
+      "gluten-free",
+      "lactose-free",
+      "nut-free"
+    ]
+  },
+
+  {
+    id: "herbed-polenta-bites",
+    name: "Herbed Polenta Bites",
+    categoryIds: ["plant-based", "reception"],
+    capabilities: [
+      "savory",
+      "finger-food",
+      "warm",
+      "apero",
+      "reception",
+      "prepare-ahead"
+    ],
+    serving: {
+      piecesPerServing: 2
+    },
+    ingredients: [
+      {
+        concept: "polenta-bite",
+        amountPerServing: 2,
+        unit: "piece"
+      },
+      {
+        concept: "basil",
+        amountPerServing: 2,
+        unit: "g"
+      }
+    ],
+    scores: {
+      price: 0.8,
+      swiss: 0,
+      presentation: 0.87,
+      prepEase: 0.88,
+      sustainability: 0.9
+    },
+    dietaryCapabilities: [
+      "vegan",
+      "vegetarian",
+      "halal",
+      "gluten-free",
+      "lactose-free",
+      "nut-free"
+    ]
+  },
+
+  {
+    id: "swiss-beef-meatballs",
+    name: "Swiss Beef Meatballs",
+    categoryIds: ["meat", "reception"],
+    capabilities: [
+      "savory",
+      "finger-food",
+      "warm",
+      "apero",
+      "reception"
+    ],
+    serving: {
+      piecesPerServing: 3
+    },
+    ingredients: [
+      {
+        concept: "beef-meatball",
+        amountPerServing: 3,
+        unit: "piece"
+      }
+    ],
+    scores: {
+      price: 0.67,
+      swiss: 1,
+      presentation: 0.78,
+      prepEase: 0.9,
+      sustainability: 0.48
+    },
+    dietaryCapabilities: [
+      "gluten-free",
+      "lactose-free",
+      "nut-free"
+    ]
+  },
+
+  {
+    id: "gruyere-grape-skewers",
+    name: "Gruyère & Grape Skewers",
+    categoryIds: ["plant-based", "reception"],
+    capabilities: [
+      "savory",
+      "finger-food",
+      "cold",
+      "apero",
+      "reception",
+      "prepare-ahead"
+    ],
+    serving: {
+      piecesPerServing: 2
+    },
+    ingredients: [
+      {
+        concept: "gruyere-cube",
+        amountPerServing: 45,
+        unit: "g"
+      },
+      {
+        concept: "grape",
+        amountPerServing: 75,
+        unit: "g"
+      }
+    ],
+    scores: {
+      price: 0.58,
+      swiss: 0,
+      presentation: 0.93,
+      prepEase: 0.88,
+      sustainability: 0.65
+    },
+    dietaryCapabilities: [
+      "vegetarian",
+      "gluten-free",
+      "nut-free"
+    ]
+  },
+
+  {
+    id: "hummus-stuffed-mini-peppers",
+    name: "Hummus-Stuffed Mini Peppers",
+    categoryIds: ["plant-based", "reception"],
+    capabilities: [
+      "savory",
+      "finger-food",
+      "cold",
+      "apero",
+      "reception",
+      "prepare-ahead"
+    ],
+    serving: {
+      piecesPerServing: 2
+    },
+    ingredients: [
+      {
+        concept: "mini-sweet-pepper",
+        amountPerServing: 90,
+        unit: "g"
+      },
+      {
+        concept: "hummus",
+        amountPerServing: 25,
+        unit: "g"
+      }
+    ],
+    scores: {
+      price: 0.81,
+      swiss: 0,
+      presentation: 0.92,
+      prepEase: 0.72,
+      sustainability: 0.9
+    },
+    dietaryCapabilities: [
+      "vegan",
+      "vegetarian",
+      "halal",
+      "gluten-free",
+      "lactose-free",
+      "nut-free"
+    ]
+  },
+
+  {
+    id: "vegetable-antipasti-skewers",
+    name: "Swiss Vegetable Antipasti Skewers",
+    categoryIds: ["plant-based", "reception"],
+    capabilities: [
+      "savory",
+      "finger-food",
+      "cold",
+      "apero",
+      "reception",
+      "prepare-ahead"
+    ],
+    serving: {
+      piecesPerServing: 2
+    },
+    ingredients: [
+      {
+        concept: "mixed-vegetables",
+        amountPerServing: 110,
+        unit: "g"
+      },
+      {
+        concept: "basil",
+        amountPerServing: 3,
+        unit: "g"
+      }
+    ],
+    scores: {
+      price: 0.83,
+      swiss: 1,
+      presentation: 0.9,
+      prepEase: 0.76,
+      sustainability: 0.94
     },
     dietaryCapabilities: [
       "vegan",
@@ -2434,6 +2684,180 @@ const products = [
       price: 0.74,
       swiss: 0,
       sustainability: 0.88
+    },
+    dietaryCapabilities: [
+      "vegan",
+      "vegetarian",
+      "halal",
+      "gluten-free",
+      "lactose-free",
+      "nut-free"
+    ]
+  },
+
+  {
+    id: "mini-roesti-40",
+    sku: "MOCK-031",
+    name: "Swiss Mini Rösti 40 pcs",
+    concept: "mini-roesti",
+    originCountry: "CH",
+    package: {
+      amount: 40,
+      unit: "piece"
+    },
+    price: {
+      amount: 24.9,
+      currency: "CHF"
+    },
+    capabilities: ["finger-food", "ready-to-heat"],
+    scores: {
+      price: 0.76,
+      swiss: 1,
+      sustainability: 0.78
+    },
+    dietaryCapabilities: [
+      "vegan",
+      "vegetarian",
+      "halal",
+      "gluten-free",
+      "lactose-free",
+      "nut-free"
+    ]
+  },
+
+  {
+    id: "polenta-bites-36",
+    sku: "MOCK-032",
+    name: "Herbed Polenta Bites 36 pcs",
+    concept: "polenta-bite",
+    originCountry: "IT",
+    package: {
+      amount: 36,
+      unit: "piece"
+    },
+    price: {
+      amount: 20.9,
+      currency: "CHF"
+    },
+    capabilities: ["finger-food", "ready-to-heat"],
+    scores: {
+      price: 0.82,
+      swiss: 0,
+      sustainability: 0.9
+    },
+    dietaryCapabilities: [
+      "vegan",
+      "vegetarian",
+      "halal",
+      "gluten-free",
+      "lactose-free",
+      "nut-free"
+    ]
+  },
+
+  {
+    id: "beef-meatballs-40",
+    sku: "MOCK-033",
+    name: "Swiss Beef Meatballs 40 pcs",
+    concept: "beef-meatball",
+    originCountry: "CH",
+    package: {
+      amount: 40,
+      unit: "piece"
+    },
+    price: {
+      amount: 29.9,
+      currency: "CHF"
+    },
+    capabilities: ["finger-food", "ready-to-heat"],
+    scores: {
+      price: 0.67,
+      swiss: 1,
+      sustainability: 0.48
+    },
+    dietaryCapabilities: [
+      "gluten-free",
+      "lactose-free",
+      "nut-free"
+    ]
+  },
+
+  {
+    id: "gruyere-cubes-1kg",
+    sku: "MOCK-034",
+    name: "Swiss Gruyère Cubes 1 kg",
+    concept: "gruyere-cube",
+    originCountry: "CH",
+    package: {
+      amount: 1000,
+      unit: "g"
+    },
+    price: {
+      amount: 24.9,
+      currency: "CHF"
+    },
+    capabilities: ["finger-food"],
+    scores: {
+      price: 0.58,
+      swiss: 1,
+      sustainability: 0.64
+    },
+    dietaryCapabilities: [
+      "vegetarian",
+      "gluten-free",
+      "nut-free"
+    ]
+  },
+
+  {
+    id: "grapes-1kg",
+    sku: "MOCK-035",
+    name: "Table Grapes 1 kg",
+    concept: "grape",
+    originCountry: "IT",
+    package: {
+      amount: 1000,
+      unit: "g"
+    },
+    price: {
+      amount: 6.9,
+      currency: "CHF"
+    },
+    capabilities: [],
+    scores: {
+      price: 0.8,
+      swiss: 0,
+      sustainability: 0.7
+    },
+    dietaryCapabilities: [
+      "vegan",
+      "vegetarian",
+      "halal",
+      "gluten-free",
+      "lactose-free",
+      "nut-free"
+    ]
+  },
+
+  {
+    id: "mini-sweet-peppers-1kg",
+    sku: "MOCK-036",
+    name: "Mini Sweet Peppers 1 kg",
+    concept: "mini-sweet-pepper",
+    originCountry: "ES",
+    package: {
+      amount: 1000,
+      unit: "g"
+    },
+    price: {
+      amount: 7.9,
+      currency: "CHF"
+    },
+    capabilities: [],
+    scores: {
+      price: 0.84,
+      swiss: 0,
+      sustainability: 0.86
     },
     dietaryCapabilities: [
       "vegan",

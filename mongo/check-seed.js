@@ -23,6 +23,19 @@ const expectedDietaryConstraintIds = [
   "nut-free"
 ];
 
+const expectedAperoAlternativeMealIds = [
+  "falafel-hummus-canapes",
+  "tomato-basil-bites",
+  "smoked-salmon-cucumber-bites",
+  "vegetable-rice-paper-rolls",
+  "mini-roesti-bites",
+  "herbed-polenta-bites",
+  "swiss-beef-meatballs",
+  "gruyere-grape-skewers",
+  "hummus-stuffed-mini-peppers",
+  "vegetable-antipasti-skewers"
+];
+
 const templateCount = db.eventTemplates.countDocuments();
 const mealCount = db.meals.countDocuments();
 const productCount = db.products.countDocuments();
@@ -37,8 +50,8 @@ print(`Priorities:  ${priorityCount}`);
 print(`Constraints: ${constraintCount}`);
 print(`Categories:  ${categoryCount}`);
 
-if (templateCount !== 6 || mealCount !== 27 || productCount !== 30 || priorityCount !== 5 || constraintCount !== 6 || categoryCount !== 7) {
-  failSeed("Unexpected seed size; expected exactly 6 templates, 27 meals, 30 products, 5 planning priorities, 6 dietary constraints, and 7 meal categories.");
+if (templateCount !== 6 || mealCount !== 33 || productCount !== 36 || priorityCount !== 5 || constraintCount !== 6 || categoryCount !== 7) {
+  failSeed("Unexpected seed size; expected exactly 6 templates, 33 meals, 36 products, 5 planning priorities, 6 dietary constraints, and 7 meal categories.");
 }
 
 const definedPriorityIds = new Set(db.planningPriorities.find({}, { id: 1 }).toArray().map(priority => priority.id));
@@ -180,6 +193,26 @@ if (unresolvedRequirements.length > 0) {
   failSeed(`Requirements without candidates: ${unresolvedRequirements.join(", ")}`);
 }
 
+const aperoCapabilities = ["savory", "finger-food", "apero"];
+const aperoCandidates = db.meals.find({
+  capabilities: { $all: aperoCapabilities }
+}).toArray();
+const aperoCandidateIds = new Set(aperoCandidates.map(meal => meal.id));
+const missingAperoAlternatives = expectedAperoAlternativeMealIds.filter(id => !aperoCandidateIds.has(id));
+if (aperoCandidates.length < 15 || missingAperoAlternatives.length > 0) {
+  failSeed(
+    `Business Apéro requires at least 15 pin/remove candidates; found ${aperoCandidates.length}` +
+    `${missingAperoAlternatives.length > 0 ? `, missing ${missingAperoAlternatives.join(", ")}` : ""}.`
+  );
+}
+
+const veganAperoCandidateCount = aperoCandidates.filter(meal =>
+  (meal.dietaryCapabilities || []).includes("vegan")
+).length;
+if (veganAperoCandidateCount < 5) {
+  failSeed(`Business Apéro requires at least 5 vegan alternatives; found ${veganAperoCandidateCount}.`);
+}
+
 const missingIngredientConcepts = [];
 db.meals.find().forEach(meal => {
   meal.ingredients.forEach(ingredient => {
@@ -312,4 +345,4 @@ db.mealCategories.find({}, { id: 1, label: 1 }).sort({ displayOrder: 1 }).forEac
 });
 
 print("");
-print("All template defaults, event/dietary capability boundaries, requirements, ingredients, priority metadata, constraints, categories, Swiss scores, dietary fixtures, and water alternatives are valid.");
+print("All template defaults, event/dietary capability boundaries, requirements, ingredients, priority metadata, constraints, categories, Swiss scores, dietary fixtures, Business Apéro alternatives, and water alternatives are valid.");
