@@ -546,6 +546,199 @@ class PlannerEngineTest {
         assertTrue(capabilityShareException.message!!.contains("between 0.0 and 1.0"))
     }
 
+    @Test
+    fun `normalizes request weights and treats missing score components as zero`() {
+        val template = broadMealTemplate().copy(weights = allPriorityWeights())
+        val scoredMeal = meal("scored", setOf("savory"), "scored-food", 0.72).copy(
+            scores = mapOf(
+                "price" to 0.72,
+                "swiss" to 0.0,
+                "presentation" to 0.88,
+                "prepEase" to 0.86,
+                "sustainability" to 0.58,
+            ),
+        )
+        val missingPresentationScore = meal("missing", setOf("savory"), "missing-food", 0.72)
+        val request = ResolvePlanRequest(
+            templateId = template.templateId,
+            guestCount = 10,
+            budget = 1_000.0,
+            weights = mapOf(
+                "price" to 0.15,
+                "swiss" to 0.0,
+                "presentation" to 0.35,
+                "prepEase" to 0.0,
+                "sustainability" to 0.0,
+            ),
+        )
+
+        val scoredPlan = engine.resolve(template, listOf(scoredMeal), productsFor(listOf(scoredMeal)), request)
+        val missingScorePlan = engine.resolve(
+            template,
+            listOf(missingPresentationScore),
+            productsFor(listOf(missingPresentationScore)),
+            request,
+        )
+
+        assertEquals(
+            mapOf(
+                "price" to 0.3,
+                "swiss" to 0.0,
+                "presentation" to 0.7,
+                "prepEase" to 0.0,
+                "sustainability" to 0.0,
+            ),
+            scoredPlan.event.appliedWeights,
+        )
+        assertEquals(0.832, scoredPlan.selectedMeals.single().finalWeightedScore)
+        assertEquals(0.216, missingScorePlan.selectedMeals.single().finalWeightedScore)
+    }
+
+    @Test
+    fun `pure priorities change meal and direct product winners`() {
+        val template = EventTemplate(
+            templateId = "weighted-menu",
+            name = "Weighted menu",
+            description = "Test",
+            requirements = listOf(
+                requirement("menu", "meal", setOf("savory", "event"), 1.0, "servings-per-guest"),
+                requirement("water", "product", setOf("water"), 0.3, "liter-per-guest"),
+            ),
+            weights = allPriorityWeights(),
+        )
+        val priceMeal = meal("price-meal", setOf("savory", "event"), "price-food", 1.0).copy(
+            scores = mapOf("price" to 1.0, "swiss" to 0.0),
+        )
+        val swissMeal = meal("swiss-meal", setOf("savory", "event"), "swiss-food", 0.0).copy(
+            scores = mapOf("price" to 0.0, "swiss" to 1.0),
+        )
+        val budgetWater = product("budget-water-12l", "water", 12.0, "liter", 8.4, setOf("water")).copy(
+            scores = mapOf("price" to 0.98, "swiss" to 0.0),
+        )
+        val swissWater = product("mineral-water-6x15", "water", 9.0, "liter", 8.9, setOf("water")).copy(
+            scores = mapOf("price" to 0.70, "swiss" to 1.0),
+        )
+        val catalogProducts = productsFor(listOf(priceMeal, swissMeal)) + budgetWater + swissWater
+
+        fun planFor(priority: String) = engine.resolve(
+            template,
+            listOf(priceMeal, swissMeal),
+            catalogProducts,
+            ResolvePlanRequest(
+                templateId = template.templateId,
+                guestCount = 20,
+                budget = 1_000.0,
+                servingsPerGuest = 2,
+                mealCount = 1,
+                weights = allPriorityWeights().mapValues { (key, _) -> if (key == priority) 1.0 else 0.0 },
+            ),
+        )
+
+        val pricePlan = planFor("price")
+        val swissPlan = planFor("swiss")
+
+        assertEquals("price-meal", pricePlan.selectedMeals.single().mealId)
+        assertEquals("budget-water-12l", pricePlan.fulfilledRequirements.single { it.requirementId == "water" }.selectedCandidateId)
+        assertEquals("swiss-meal", swissPlan.selectedMeals.single().mealId)
+        assertEquals("mineral-water-6x15", swissPlan.fulfilledRequirements.single { it.requirementId == "water" }.selectedCandidateId)
+    }
+
+    @Test
+    fun `capability share eligibility takes precedence over a conflicting score`() {
+        val template = broadMealTemplate().copy(weights = allPriorityWeights())
+        val swissMeal = meal("swiss-meal", setOf("savory"), "swiss-food", 0.0).copy(
+            scores = mapOf("swiss" to 1.0),
+        )
+        val halalMeal = meal("halal-meal", setOf("savory", "halal"), "halal-food", 0.0).copy(
+            scores = mapOf("swiss" to 0.0),
+        )
+
+        val plan = engine.resolve(
+            template,
+            listOf(swissMeal, halalMeal),
+            productsFor(listOf(swissMeal, halalMeal)),
+            ResolvePlanRequest(
+                templateId = template.templateId,
+                guestCount = 10,
+                budget = 1_000.0,
+                servingsPerGuest = 1,
+                mealCount = 1,
+                capabilityShares = mapOf("halal" to 1.0),
+                weights = allPriorityWeights().mapValues { (key, _) -> if (key == "swiss") 1.0 else 0.0 },
+            ),
+        )
+
+        assertEquals("halal-meal", plan.selectedMeals.single().mealId)
+        assertEquals(10, plan.selectedMeals.single().servings)
+        assertTrue(plan.warnings.none { it.contains("halal") })
+    }
+
+    @Test
+    fun `automatically added meals remain compatible with a template meal requirement`() {
+        val template = EventTemplate(
+            templateId = "apero-only",
+            name = "Apéro only",
+            description = "Test",
+            requirements = listOf(
+                requirement("apero", "meal", setOf("savory", "finger-food", "apero"), 1.0, "servings-per-guest"),
+            ),
+            weights = mapOf("price" to 1.0),
+        )
+        val bestApero = meal(
+            "best-apero",
+            setOf("savory", "finger-food", "apero"),
+            "best-apero-food",
+            0.8,
+        )
+        val secondApero = meal(
+            "second-apero",
+            setOf("savory", "finger-food", "apero"),
+            "second-apero-food",
+            0.1,
+        )
+        val unrelatedLunch = meal(
+            "unrelated-lunch",
+            setOf("savory", "lunch", "buffet"),
+            "unrelated-food",
+            1.0,
+        )
+        val meals = listOf(bestApero, secondApero, unrelatedLunch)
+
+        val plan = engine.resolve(
+            template,
+            meals,
+            productsFor(meals),
+            ResolvePlanRequest(
+                templateId = template.templateId,
+                guestCount = 20,
+                budget = 1_000.0,
+                servingsPerGuest = 2,
+                mealCount = 2,
+            ),
+        )
+        val explicitRequiredPlan = engine.resolve(
+            template,
+            meals,
+            productsFor(meals),
+            ResolvePlanRequest(
+                templateId = template.templateId,
+                guestCount = 20,
+                budget = 1_000.0,
+                servingsPerGuest = 2,
+                mealCount = 3,
+                requiredMealIds = setOf("unrelated-lunch"),
+            ),
+        )
+
+        assertEquals(listOf("best-apero", "second-apero"), plan.selectedMeals.map { it.mealId })
+        assertEquals(40, plan.selectedMeals.sumOf { it.servings })
+        assertEquals(
+            setOf("best-apero", "second-apero", "unrelated-lunch"),
+            explicitRequiredPlan.selectedMeals.map { it.mealId }.toSet(),
+        )
+        assertEquals(40, explicitRequiredPlan.selectedMeals.sumOf { it.servings })
+    }
+
     private fun broadMealTemplate(defaultMealCount: Double? = null) = EventTemplate(
         templateId = "broad-meal",
         name = "Broad meal",
@@ -553,6 +746,14 @@ class PlannerEngineTest {
         defaults = defaultMealCount?.let { mapOf("mealCount" to it) } ?: emptyMap(),
         requirements = listOf(requirement("savory", "meal", setOf("savory"), 1.0, "servings-per-guest")),
         weights = mapOf("price" to 1.0),
+    )
+
+    private fun allPriorityWeights() = mapOf(
+        "price" to 0.2,
+        "swiss" to 0.2,
+        "presentation" to 0.2,
+        "prepEase" to 0.2,
+        "sustainability" to 0.2,
     )
 
     private fun productsFor(meals: List<Meal>): List<Product> = meals.map { meal ->

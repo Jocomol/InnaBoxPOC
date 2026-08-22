@@ -391,6 +391,14 @@ class PlannerEngine {
             .filter { mealAllowed(it, constraints) }
             .sortedBy { it.mealId }
             .toList()
+        val templateMealCapabilitySets = template.requirements.asSequence()
+            .filter { it.type.equals("meal", ignoreCase = true) }
+            .map { normalizeCapabilities(it.requiredCapabilities) }
+            .toList()
+        val automaticallySelectableMeals = validMeals.filter { meal ->
+            val capabilities = normalizeCapabilities(meal.capabilities)
+            templateMealCapabilitySets.any { capabilities.containsAll(it) }
+        }
         val requiredMealsById = requiredMeals.associateBy { it.mealId }
         val unassignedRequiredMealIds = requiredMealsById.keys.toSortedSet()
         val selectedById = linkedMapOf<String, MealSelection>()
@@ -494,7 +502,7 @@ class PlannerEngine {
 
         while (missingShares().isNotEmpty() && selectedById.size < selectionLimit) {
             val missing = missingShares()
-            val candidates = validMeals.filter { meal ->
+            val candidates = automaticallySelectableMeals.filter { meal ->
                 meal.mealId !in selectedById &&
                     normalizeCapabilities(meal.capabilities).any { it in missing }
             }
@@ -510,7 +518,7 @@ class PlannerEngine {
         }
 
         while (desiredMealCount != null && selectedById.size < selectionLimit) {
-            val candidates = validMeals.filter { it.mealId !in selectedById }
+            val candidates = automaticallySelectableMeals.filter { it.mealId !in selectedById }
             val chosen = selectMealForCapabilities(
                 candidates,
                 emptyMap(),
