@@ -14,6 +14,15 @@ const expectedTemplateIds = [
   "swiss-breakfast"
 ];
 
+const expectedDietaryConstraintIds = [
+  "vegetarian",
+  "vegan",
+  "halal",
+  "gluten-free",
+  "lactose-free",
+  "nut-free"
+];
+
 const templateCount = db.eventTemplates.countDocuments();
 const mealCount = db.meals.countDocuments();
 const productCount = db.products.countDocuments();
@@ -28,8 +37,8 @@ print(`Priorities:  ${priorityCount}`);
 print(`Constraints: ${constraintCount}`);
 print(`Categories:  ${categoryCount}`);
 
-if (templateCount !== 6 || mealCount !== 22 || productCount !== 20 || priorityCount !== 5 || constraintCount < 4 || categoryCount < 1) {
-  failSeed("Unexpected seed size; expected exactly 6 templates, 22 meals, 20 products, and 5 planning priorities, plus at least 4 dietary constraints and 1 meal category.");
+if (templateCount !== 6 || mealCount !== 27 || productCount !== 30 || priorityCount !== 5 || constraintCount !== 6 || categoryCount !== 7) {
+  failSeed("Unexpected seed size; expected exactly 6 templates, 27 meals, 30 products, 5 planning priorities, 6 dietary constraints, and 7 meal categories.");
 }
 
 const definedPriorityIds = new Set(db.planningPriorities.find({}, { id: 1 }).toArray().map(priority => priority.id));
@@ -81,6 +90,11 @@ if (invalidConstraints.length > 0) {
   throw new Error(`Dietary constraints without usable metadata/rules: ${invalidConstraints.join(", ")}`);
 }
 
+const missingDietaryConstraints = expectedDietaryConstraintIds.filter(id => !db.dietaryConstraints.findOne({ id }));
+if (missingDietaryConstraints.length > 0) {
+  failSeed(`Missing dietary constraints: ${missingDietaryConstraints.join(", ")}`);
+}
+
 const missingTemplates = expectedTemplateIds.filter(id => !db.eventTemplates.findOne({ id }));
 if (missingTemplates.length > 0) {
   failSeed(`Missing templates: ${missingTemplates.join(", ")}`);
@@ -114,26 +128,39 @@ if (templateDietaryShares.length > 0) {
 const dietaryCapabilityNames = new Set(
   db.dietaryConstraints.find({}, { dietaryCapability: 1 }).toArray().map(constraint => constraint.dietaryCapability)
 );
-const mixedMealCapabilities = [];
-db.meals.find().forEach(meal => {
-  if (!Array.isArray(meal.dietaryCapabilities)) {
-    mixedMealCapabilities.push(`${meal.id}/missing-dietaryCapabilities`);
-  }
-  (meal.capabilities || []).forEach(capability => {
-    if (dietaryCapabilityNames.has(capability)) mixedMealCapabilities.push(`${meal.id}/capabilities.${capability}`);
+const mixedCatalogCapabilities = [];
+const unknownDietaryCapabilities = [];
+["meals", "products"].forEach(collectionName => {
+  db.getCollection(collectionName).find().forEach(document => {
+    if (!Array.isArray(document.dietaryCapabilities)) {
+      mixedCatalogCapabilities.push(`${collectionName}/${document.id}/missing-dietaryCapabilities`);
+    }
+    (document.capabilities || []).forEach(capability => {
+      if (dietaryCapabilityNames.has(capability)) {
+        mixedCatalogCapabilities.push(`${collectionName}/${document.id}/capabilities.${capability}`);
+      }
+    });
+    (document.dietaryCapabilities || []).forEach(capability => {
+      if (!dietaryCapabilityNames.has(capability)) {
+        unknownDietaryCapabilities.push(`${collectionName}/${document.id}/dietaryCapabilities.${capability}`);
+      }
+    });
   });
 });
 db.eventTemplates.find().forEach(template => {
   (template.requirements || []).filter(requirement => requirement.type === "meal").forEach(requirement => {
     (requirement.requiredCapabilities || []).forEach(capability => {
       if (dietaryCapabilityNames.has(capability)) {
-        mixedMealCapabilities.push(`${template.id}/${requirement.id}/requiredCapabilities.${capability}`);
+        mixedCatalogCapabilities.push(`eventTemplates/${template.id}/${requirement.id}/requiredCapabilities.${capability}`);
       }
     });
   });
 });
-if (mixedMealCapabilities.length > 0) {
-  failSeed(`Dietary capabilities leaked into event/menu capabilities: ${mixedMealCapabilities.join(", ")}`);
+if (mixedCatalogCapabilities.length > 0) {
+  failSeed(`Dietary capabilities leaked into event/menu or product-function capabilities: ${mixedCatalogCapabilities.join(", ")}`);
+}
+if (unknownDietaryCapabilities.length > 0) {
+  failSeed(`Dietary capabilities without constraint metadata: ${unknownDietaryCapabilities.join(", ")}`);
 }
 
 const unresolvedRequirements = [];
@@ -227,6 +254,31 @@ const invalidGlutenFreeProducts = glutenFreeIngredientProducts.filter(id => {
 });
 if (invalidGlutenFreeProducts.length > 0) {
   failSeed(`Missing or incorrectly tagged gluten-free ingredient products: ${invalidGlutenFreeProducts.join(", ")}`);
+}
+
+const expandedDietaryFixtures = [
+  { collectionName: "meals", id: "lentil-quinoa-bowl", capabilities: expectedDietaryConstraintIds },
+  { collectionName: "meals", id: "lactose-free-bircher", capabilities: ["lactose-free", "nut-free"] },
+  { collectionName: "meals", id: "gluten-free-brownie-bites", capabilities: ["gluten-free"] },
+  { collectionName: "meals", id: "smoked-salmon-cucumber-bites", capabilities: ["gluten-free", "lactose-free", "nut-free"] },
+  { collectionName: "meals", id: "vegetable-rice-paper-rolls", capabilities: expectedDietaryConstraintIds },
+  { collectionName: "products", id: "lactose-free-yogurt-1kg", capabilities: ["gluten-free", "lactose-free", "nut-free"] },
+  { collectionName: "products", id: "rice-paper-rolls-30", capabilities: expectedDietaryConstraintIds }
+];
+const invalidExpandedDietaryFixtures = [];
+expandedDietaryFixtures.forEach(fixture => {
+  const document = db.getCollection(fixture.collectionName).findOne({ id: fixture.id });
+  const missingCapabilities = fixture.capabilities.filter(capability =>
+    !(document?.dietaryCapabilities || []).includes(capability)
+  );
+  if (!document || missingCapabilities.length > 0) {
+    invalidExpandedDietaryFixtures.push(
+      `${fixture.collectionName}/${fixture.id}${missingCapabilities.length > 0 ? `/missing:${missingCapabilities.join("+")}` : ""}`
+    );
+  }
+});
+if (invalidExpandedDietaryFixtures.length > 0) {
+  failSeed(`Missing or incorrectly tagged expanded dietary fixtures: ${invalidExpandedDietaryFixtures.join(", ")}`);
 }
 
 const missingWaterAlternatives = [];
