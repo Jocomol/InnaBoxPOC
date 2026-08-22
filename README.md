@@ -1,94 +1,118 @@
-# Catering Planner PoC
+# TABLEPLAN — localization & responsive UI polish
 
-A deterministic Kotlin/Spring Boot catering resolver backed by MongoDB, with a small browser frontend. It converts an event template, guest count, budget, priorities, constraints, and existing stock into an explainable menu and package-level shopping list.
+This bundle is an incremental update for the current localized/visual branch.
 
-## Run it
+## Replace these files
 
-```bash
-docker compose up --build
-```
+- `frontend/app.js`
+- `frontend/i18n.js`
+- `frontend/styles.css`
+- `backend/src/main/kotlin/ch/inabox/catering/service/TranslationService.kt`
+- `docker-compose.localization.yml`
 
-Open [http://localhost:3000](http://localhost:3000). The backend API is also available at [http://localhost:8080/api/templates](http://localhost:8080/api/templates), with interactive documentation at [http://localhost:8080/swagger-ui.html](http://localhost:8080/swagger-ui.html).
+No MongoDB files changed and no reseed is required.
 
-The first MongoDB initialization automatically seeds 6 templates, 19 meals, 17 mock products, and 5 planning-priority definitions. The seed is idempotent. To apply it again without deleting the volume:
+## What changed
 
-```bash
-./scripts/reseed.sh
-```
+### Localization
 
-Verify the catalog:
+- Curated DE/FR/IT translations now cover the complete current demo catalog display vocabulary:
+  - 6 event names + descriptions
+  - 6 dietary labels + descriptions
+  - 7 meal categories + descriptions
+  - 5 planning priorities + descriptions + scale labels
+  - all 33 seeded meal names
+  - all 36 seeded product names
+  - all current meal/product capability labels
+  - all current ingredient concepts used by the stock/catalog UI
+  - current requirement labels
+- `Scrambled Eggs` is explicitly `Rührei` / `Œufs brouillés` / `Uova strapazzate`.
+- Capability chips are curated too, e.g. `Savory -> Herzhaft`, `Cold -> Kalt serviert`, `Breakfast -> Frühstück`.
+- Existing browser translation cache entries are bypassed with a new cache namespace, so old bad MT results do not survive this update.
+- Dynamic translation batches are chunked instead of overflowing the backend's batch limit.
+- Dynamic elements that appeared before LibreTranslate was ready are now retried automatically instead of remaining English forever.
+- Curated translations work even while LibreTranslate is still warming up; unknown future DB text still falls through to machine translation when the provider is ready.
+- Localized search now also reverses the curated catalog glossary. Partial localized terms such as `Rührei`, `herzhaft`, `Rösti`, `saumon`, etc. produce useful English catalog search variants without modifying MongoDB.
 
-```bash
-docker compose exec -T mongodb mongosh catering < mongo/check-seed.js
-```
+### Responsive UI
 
-## Included event templates
+- Meal-category filter buttons wrap onto as many rows as needed. There is no horizontal category scrollbar anymore.
+- Dietary cards always place their guest-count input on a separate row underneath the icon/description. Long translated descriptions cannot overlap or push into the number input at any width.
+- Event cards become one-column on phones and retain their translated subtitle instead of hiding it.
+- Responsive shopping-table labels and several dynamic status/helper strings now use localized UI text as well.
 
-- Business Apéro
-- Brunch
-- Coffee Break
-- Team Lunch Buffet
-- Vegan Reception
-- Swiss Breakfast
-
-Every seeded template can be resolved entirely from the mock catalog. The additional meals include parfaits, fruit cups and skewers, break-time bites, lunch bowls and platters, vegan canapés, and Swiss breakfast dishes.
-
-The frontend includes a searchable catalog browser for inspecting recipes and purchasable items directly from the API. Results can be filtered by capability, and expose ingredient, package, origin, price, and planning-score data.
-
-## API
-
-The backend generates an OpenAPI 3.1 description from its controllers and Kotlin models. The documentation includes field constraints, seeded examples, resolver behavior, response schemas, and error responses.
-
-- Interactive Swagger UI: [http://localhost:8080/swagger-ui.html](http://localhost:8080/swagger-ui.html)
-- OpenAPI JSON: [http://localhost:8080/v3/api-docs](http://localhost:8080/v3/api-docs)
-- OpenAPI YAML: [http://localhost:8080/v3/api-docs.yaml](http://localhost:8080/v3/api-docs.yaml)
-
-Swagger UI's **Try it out** requests go directly to the backend and require the seeded MongoDB catalog to be running.
-
-```text
-GET  /api/templates
-GET  /api/templates/{id}
-GET  /api/meals
-GET  /api/products
-GET  /api/priorities
-POST /api/plans/resolve
-```
-
-Example resolution request:
+## Clean rebuild
 
 ```bash
-curl -X POST http://localhost:8080/api/plans/resolve \
+sudo docker compose \
+  -f docker-compose.yml \
+  -f docker-compose.localization.yml \
+  down
+
+sudo docker compose \
+  -f docker-compose.yml \
+  -f docker-compose.localization.yml \
+  build --no-cache
+
+sudo docker compose \
+  -f docker-compose.yml \
+  -f docker-compose.localization.yml \
+  up -d
+```
+
+Check the stack:
+
+```bash
+sudo docker compose \
+  -f docker-compose.yml \
+  -f docker-compose.localization.yml \
+  ps
+```
+
+Check localization service:
+
+```bash
+curl http://localhost:8080/api/i18n/status
+```
+
+## Useful checks
+
+German translation:
+
+```bash
+curl -sS -X POST http://localhost:8080/api/i18n/translate \
   -H 'Content-Type: application/json' \
   -d '{
-    "templateId": "business-apero",
-    "guestCount": 40,
-    "budget": 800,
-    "servingsPerGuest": 4,
-    "requiredMealIds": ["mini-spinach-quiche"],
-    "weights": { "price": 0.3, "swiss": 0.25, "presentation": 0.2, "prepEase": 0.15, "sustainability": 0.1 },
-    "availableInventory": [{ "concept": "mini-spinach-quiche", "amount": 40, "unit": "piece" }]
+    "sourceLanguage":"en",
+    "targetLanguage":"de",
+    "items":[
+      {"text":"Scrambled Eggs","context":"meal-name"},
+      {"text":"Savory","context":"capability"},
+      {"text":"Cold","context":"capability"},
+      {"text":"Breakfast","context":"capability"},
+      {"text":"A warm and cold Swiss-inspired breakfast with coffee and apple juice.","context":"event-description"}
+    ]
   }'
 ```
 
-`servingsPerGuest` is optional and accepts an integer from 1 to 10. It scales the combined meal quantity while preserving the template's proportions between selected dishes; omitting it uses the template quantities unchanged. Drinks and non-food supplies are not scaled.
+Expected terms include `Rührei`, `Herzhaft`, `Kalt serviert`, and `Frühstück`.
 
-`requiredMealIds` guarantees that specific catalog meals appear in the menu. A guaranteed meal occupies a compatible template requirement when possible; otherwise it is included as an additional dish. Unknown meals or meals that conflict with hard dietary constraints make the plan unresolvable with HTTP 422.
-
-Weight overrides are merged with database defaults and template-specific defaults, then normalized. Priority labels, descriptions, display order, scale labels, and fallback weights come from the `planningPriorities` MongoDB collection, so neither the API nor planner UI contains a fixed list of priorities. Unknown request weights are rejected, and the seed check rejects any template weight or catalog score without matching priority metadata.
-
-Required capabilities filter meal candidates before scoring; excluded capabilities filter both meal and product candidates. Excluded concepts are enforced during guaranteed-meal validation and product resolution. Quantities support compatible mass, volume, and count units; product conversions handle serving units such as cups of coffee to grams of beans.
-
-### Score semantics
-
-Template weights express relative importance, so `swiss: 0.20` means Swiss sourcing contributes 20% of the weighted decision. Candidate scores describe the candidate itself:
-
-- `swiss` is categorical: `1.0` for Swiss origin and `0.0` otherwise. Product origin is stored in `originCountry`; a meal receives `1.0` only when every seeded ingredient is Swiss-sourced.
-- `price` is affordability, where a higher value is more economical for its comparable use.
-- `presentation`, `prepEase`, and `sustainability` remain normalized desirability estimates from `0.0` to `1.0`.
-
-## Backend tests
+Localized meal search:
 
 ```bash
-cd backend
-mvn test
+curl -sS --get 'http://localhost:8080/api/i18n/meals/search' \
+  --data-urlencode 'query=Rührei' \
+  --data-urlencode 'language=de' \
+  --data-urlencode 'limit=10'
 ```
+
+Another useful search test:
+
+```bash
+curl -sS --get 'http://localhost:8080/api/i18n/meals/search' \
+  --data-urlencode 'query=Rösti' \
+  --data-urlencode 'language=de' \
+  --data-urlencode 'limit=10'
+```
+
+After rebuilding, do one hard browser refresh (`Ctrl+Shift+R`).

@@ -961,3 +961,75 @@ footer { display: flex; justify-content: space-between; max-width: 1240px; margi
   .header-actions { gap: 6px; }
   .language-picker select { min-width: 68px; min-height: 38px; }
 }
+
+/* Localization/readability polish: never hide filters behind a horizontal scroller. */
+.picker-categories,
+.picker-filter-area .picker-categories {
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 8px;
+  overflow: visible;
+  max-width: 100%;
+  padding-right: 0;
+  scrollbar-width: none;
+}
+.picker-categories::-webkit-scrollbar { display: none; }
+.category-button {
+  flex: 0 1 auto;
+  max-width: 100%;
+  white-space: normal;
+  line-height: 1.25;
+  text-align: left;
+}
+
+/* Dietary cards: descriptive copy owns its row; numeric controls can never overlap it. */
+.constraint-card {
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas:
+    "icon copy"
+    "count count";
+  align-items: start;
+}
+.constraint-card .constraint-icon { grid-area: icon; }
+.constraint-copy {
+  grid-area: copy;
+  min-width: 0;
+  overflow: hidden;
+}
+.constraint-copy strong,
+.constraint-copy small {
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+.constraint-copy small { max-width: 100%; }
+.dietary-count-control {
+  grid-area: count;
+  display: grid;
+  grid-template-columns: minmax(88px, 1fr) auto;
+  width: 100%;
+  min-width: 0;
+  margin-top: 2px;
+}
+.dietary-count-control input {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* Keep translated event descriptions visible on phones instead of dropping useful context. */
+@media (max-width: 640px) {
+  .event-type-grid { grid-template-columns: 1fr; }
+  .event-type-card {
+    grid-template-columns: auto minmax(0, 1fr);
+    min-height: 92px;
+  }
+  .event-type-copy small {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+  .picker-categories,
+  .picker-filter-area .picker-categories { gap: 7px; }
+  .category-button { min-height: 38px; padding: 8px 11px; }
+}

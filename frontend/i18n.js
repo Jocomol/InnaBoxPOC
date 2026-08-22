@@ -8,6 +8,8 @@
   const STORAGE_KEY = 'tableplan.language.v3';
   const DB_NAME = 'tableplan-i18n';
   const DB_VERSION = 1;
+  const CACHE_NAMESPACE = 'catalog-polish-v2';
+  const MAX_FRONTEND_BATCH = 40;
   const STORE_NAME = 'translations';
 
   const messages = {
@@ -719,6 +721,19 @@
     'common.undo': 'Undo',
     'common.origin': 'Origin',
     'common.target': 'target',
+    'stock.suggestedUnit': 'Suggested unit: {unit}',
+    'dishes.statusPinned': '{name} pinned for the next generation.',
+    'dishes.statusUnpinned': '{name} unpinned and eligible for the next generation.',
+    'dishes.statusCleared.one': '1 pinned dish is eligible again for the next generation.',
+    'dishes.statusCleared.many': '{count} pinned dishes are eligible again for the next generation.',
+    'dishes.statusRemoved': '{name} removed from this menu and excluded from the next generation.',
+    'dishes.statusEligibleAgain': '{name} is eligible again for the next generation.',
+    'dishes.allowChangeTitle': 'Allow this dish to change next time',
+    'dishes.keepTitle': 'Keep this dish in the next menu',
+    'dishes.removeTitle': 'Remove this dish and exclude it from the next menu',
+    'conflict.missing': 'does not meet {items}',
+    'conflict.excluded': 'has excluded {items}',
+    'conflict.contains': 'contains {items}',
   });
 
   Object.assign(messages.de, {
@@ -754,6 +769,19 @@
     'picker.stock.matching': 'passend zu „{query}”',
     'search.localizedHint': 'Die Suche berücksichtigt die gewählte Sprache und den englischen Katalog.',
     'common.undo': 'Rückgängig', 'common.origin': 'Herkunft', 'common.target': 'Zielmenge',
+    'stock.suggestedUnit': 'Empfohlene Einheit: {unit}',
+    'dishes.statusPinned': '{name} für die nächste Berechnung angeheftet.',
+    'dishes.statusUnpinned': '{name} gelöst und für die nächste Berechnung wieder verfügbar.',
+    'dishes.statusCleared.one': '1 angeheftetes Gericht ist für die nächste Berechnung wieder verfügbar.',
+    'dishes.statusCleared.many': '{count} angeheftete Gerichte sind für die nächste Berechnung wieder verfügbar.',
+    'dishes.statusRemoved': '{name} aus diesem Menü entfernt und für die nächste Berechnung ausgeschlossen.',
+    'dishes.statusEligibleAgain': '{name} ist für die nächste Berechnung wieder verfügbar.',
+    'dishes.allowChangeTitle': 'Dieses Gericht darf sich bei der nächsten Berechnung ändern',
+    'dishes.keepTitle': 'Dieses Gericht im nächsten Menü beibehalten',
+    'dishes.removeTitle': 'Dieses Gericht entfernen und für das nächste Menü ausschliessen',
+    'conflict.missing': 'erfüllt nicht: {items}',
+    'conflict.excluded': 'enthält ausgeschlossene Eigenschaften: {items}',
+    'conflict.contains': 'enthält: {items}',
   });
 
   Object.assign(messages.fr, {
@@ -789,6 +817,19 @@
     'picker.stock.matching': 'correspondant à « {query} »',
     'search.localizedHint': 'La recherche utilise la langue choisie ainsi que le catalogue anglais.',
     'common.undo': 'Annuler', 'common.origin': 'Origine', 'common.target': 'cible',
+    'stock.suggestedUnit': 'Unité conseillée : {unit}',
+    'dishes.statusPinned': '{name} épinglé pour le prochain calcul.',
+    'dishes.statusUnpinned': '{name} désépinglé et de nouveau disponible pour le prochain calcul.',
+    'dishes.statusCleared.one': '1 plat épinglé est de nouveau disponible pour le prochain calcul.',
+    'dishes.statusCleared.many': '{count} plats épinglés sont de nouveau disponibles pour le prochain calcul.',
+    'dishes.statusRemoved': '{name} retiré de ce menu et exclu du prochain calcul.',
+    'dishes.statusEligibleAgain': '{name} est de nouveau disponible pour le prochain calcul.',
+    'dishes.allowChangeTitle': 'Autoriser ce plat à changer au prochain calcul',
+    'dishes.keepTitle': 'Conserver ce plat dans le prochain menu',
+    'dishes.removeTitle': 'Retirer ce plat et l’exclure du prochain menu',
+    'conflict.missing': 'ne satisfait pas : {items}',
+    'conflict.excluded': 'présente des caractéristiques exclues : {items}',
+    'conflict.contains': 'contient : {items}',
   });
 
   Object.assign(messages.it, {
@@ -824,6 +865,19 @@
     'picker.stock.matching': 'corrispondente a « {query} »',
     'search.localizedHint': 'La ricerca usa sia la lingua selezionata sia il catalogo inglese.',
     'common.undo': 'Annulla', 'common.origin': 'Origine', 'common.target': 'obiettivo',
+    'stock.suggestedUnit': 'Unità consigliata: {unit}',
+    'dishes.statusPinned': '{name} fissato per il prossimo calcolo.',
+    'dishes.statusUnpinned': '{name} sbloccato e nuovamente disponibile per il prossimo calcolo.',
+    'dishes.statusCleared.one': '1 piatto fissato è di nuovo disponibile per il prossimo calcolo.',
+    'dishes.statusCleared.many': '{count} piatti fissati sono di nuovo disponibili per il prossimo calcolo.',
+    'dishes.statusRemoved': '{name} rimosso da questo menu ed escluso dal prossimo calcolo.',
+    'dishes.statusEligibleAgain': '{name} è di nuovo disponibile per il prossimo calcolo.',
+    'dishes.allowChangeTitle': 'Consenti a questo piatto di cambiare al prossimo calcolo',
+    'dishes.keepTitle': 'Mantieni questo piatto nel prossimo menu',
+    'dishes.removeTitle': 'Rimuovi questo piatto ed escludilo dal prossimo menu',
+    'conflict.missing': 'non soddisfa: {items}',
+    'conflict.excluded': 'presenta caratteristiche escluse: {items}',
+    'conflict.contains': 'contiene: {items}',
   });
 
   let currentLanguage = resolveInitialLanguage();
@@ -832,7 +886,7 @@
   let providerReady = currentLanguage === SOURCE_LANGUAGE;
   let providerCheckPromise = null;
   let providerRetryTimer = null;
-  const TRANSLATION_REQUEST_TIMEOUT_MS = 3500;
+  const TRANSLATION_REQUEST_TIMEOUT_MS = 9000;
   const PROVIDER_RETRY_MS = 5000;
   const pendingDynamicElements = new Set();
   const localeListeners = new Set();
@@ -956,7 +1010,7 @@
   }
 
   function cacheKey(targetLanguage, sourceLanguage, context, text) {
-    return `${targetLanguage}|${sourceLanguage || 'auto'}|${context || 'generic'}|${text}`;
+    return `${CACHE_NAMESPACE}|${targetLanguage}|${sourceLanguage || 'auto'}|${context || 'generic'}|${text}`;
   }
 
   function scheduleProviderRetry() {
@@ -990,6 +1044,10 @@
       }
 
       if (providerReady) {
+        document.querySelectorAll('[data-i18n-dynamic-source]').forEach(element => {
+          delete element.dataset.i18nAppliedLanguage;
+          delete element.dataset.i18nAppliedSource;
+        });
         queueDynamicTree(document);
       } else {
         scheduleProviderRetry();
@@ -1027,48 +1085,52 @@
 
     if (!missing.length) return results;
 
-    if (!providerReady) {
-      ensureProviderReady();
-      missing.forEach(item => {
-        results[item.index] = { text: item.text, context: item.context, translatedText: item.text, translated: false };
-      });
-      return results;
-    }
+    // Always ask our own backend. It can serve curated catalog translations even while
+    // the external MT provider is still warming up; unknown strings simply fall back
+    // to their English source and are retried once the provider becomes ready.
+    if (!providerReady) ensureProviderReady();
 
-    const controller = new AbortController();
-    const timer = window.setTimeout(() => controller.abort(), TRANSLATION_REQUEST_TIMEOUT_MS);
     try {
-      const response = await fetch('/api/i18n/translate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        signal: controller.signal,
-        body: JSON.stringify({
-          targetLanguage,
-          sourceLanguage,
-          items: missing.map(({ text, context }) => ({ text, context }))
-        })
-      });
-      if (!response.ok) throw new Error(`Translation request failed (${response.status})`);
-      const body = await response.json();
-      const translatedItems = Array.isArray(body.items) ? body.items : [];
-      missing.forEach((item, offset) => {
-        const translated = translatedItems[offset];
-        const translatedText = String(translated?.translatedText || item.text);
-        const didTranslate = Boolean(translated?.translated && translatedText && translatedText !== item.text);
-        results[item.index] = { text: item.text, context: item.context, translatedText, translated: didTranslate };
-        if (didTranslate) {
-          memoryTranslations.set(`${targetLanguage}|${item.context}|${item.text}`, translatedText);
-          cachePut(item.key, translatedText);
+      for (let chunkStart = 0; chunkStart < missing.length; chunkStart += MAX_FRONTEND_BATCH) {
+        const chunk = missing.slice(chunkStart, chunkStart + MAX_FRONTEND_BATCH);
+        const controller = new AbortController();
+        const timer = window.setTimeout(() => controller.abort(), TRANSLATION_REQUEST_TIMEOUT_MS);
+        try {
+          const response = await fetch('/api/i18n/translate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            signal: controller.signal,
+            body: JSON.stringify({
+              targetLanguage,
+              sourceLanguage,
+              items: chunk.map(({ text, context }) => ({ text, context }))
+            })
+          });
+          if (!response.ok) throw new Error(`Translation request failed (${response.status})`);
+          const body = await response.json();
+          const translatedItems = Array.isArray(body.items) ? body.items : [];
+          chunk.forEach((item, offset) => {
+            const translated = translatedItems[offset];
+            const translatedText = String(translated?.translatedText || item.text);
+            const didTranslate = Boolean(translated?.translated);
+            results[item.index] = { text: item.text, context: item.context, translatedText, translated: didTranslate };
+            if (didTranslate) {
+              memoryTranslations.set(`${targetLanguage}|${item.context}|${item.text}`, translatedText);
+              cachePut(item.key, translatedText);
+            }
+          });
+        } finally {
+          window.clearTimeout(timer);
         }
-      });
+      }
     } catch (_) {
       providerReady = false;
       scheduleProviderRetry();
       missing.forEach(item => {
-        results[item.index] = { text: item.text, context: item.context, translatedText: item.text, translated: false };
+        if (!results[item.index]) {
+          results[item.index] = { text: item.text, context: item.context, translatedText: item.text, translated: false };
+        }
       });
-    } finally {
-      window.clearTimeout(timer);
     }
     return results;
   }
@@ -1124,16 +1186,24 @@
       if (!unique.has(key)) unique.set(key, { text, context });
     });
     const translated = await translateItems([...unique.values()]);
-    const translatedByKey = new Map(translated.map(item => [`${item.context}\u0000${item.text}`, item.translatedText]));
+    const translatedByKey = new Map(translated.map(item => [`${item.context}\u0000${item.text}`, item]));
 
     active.forEach(element => {
       const source = element.dataset.i18nDynamicSource || '';
       const context = element.dataset.i18nContext || 'generic';
       const key = `${context}\u0000${source}`;
+      const result = translatedByKey.get(key);
       if (!element.isConnected) return;
-      element.textContent = translatedByKey.get(key) || source;
-      element.dataset.i18nAppliedLanguage = currentLanguage;
-      element.dataset.i18nAppliedSource = source;
+      element.textContent = result?.translatedText || source;
+      // Never freeze an English fallback while the translation provider is unavailable.
+      // Once the provider becomes ready, these elements are queued again automatically.
+      if (currentLanguage === SOURCE_LANGUAGE || providerReady || result?.translated) {
+        element.dataset.i18nAppliedLanguage = currentLanguage;
+        element.dataset.i18nAppliedSource = source;
+      } else {
+        delete element.dataset.i18nAppliedLanguage;
+        delete element.dataset.i18nAppliedSource;
+      }
     });
   }
 

@@ -409,7 +409,7 @@ function renderPickerResults() {
       renderPickerResults();
       renderCurrentMeals();
       if (state.currentPlan) {
-        showMenuChange(`${meal.name} ${wasSelected ? 'unpinned and eligible' : 'pinned'} for the next generation.`);
+        showMenuChange(t(wasSelected ? 'dishes.statusUnpinned' : 'dishes.statusPinned', { name: i18n.cachedTranslation(meal.name, 'meal-name') }));
       }
     });
   });
@@ -434,7 +434,7 @@ function clearRequiredMeals() {
   renderPickerResults();
   renderCurrentMeals();
   if (state.currentPlan && clearedCount > 0) {
-    showMenuChange(`${clearedCount} pinned ${clearedCount === 1 ? 'dish is' : 'dishes are'} eligible again for the next generation.`);
+    showMenuChange(t(clearedCount === 1 ? 'dishes.statusCleared.one' : 'dishes.statusCleared.many', { count: clearedCount }));
   }
 }
 
@@ -500,15 +500,18 @@ function conflictSummary(conflicts) {
 }
 
 function serverConflictDetails(conflict) {
+  const translatedList = (values, context) => (values || [])
+    .map(value => i18n.cachedTranslation(humanize(value), context))
+    .join(', ');
   const parts = [];
   if (conflict.missingRequiredCapabilities?.length) {
-    parts.push(`does not provide ${conflict.missingRequiredCapabilities.map(humanize).join(', ')} coverage`);
+    parts.push(t('conflict.missing', { items: translatedList(conflict.missingRequiredCapabilities, 'capability') }));
   }
   if (conflict.excludedCapabilities?.length) {
-    parts.push(`has excluded ${conflict.excludedCapabilities.map(humanize).join(', ')}`);
+    parts.push(t('conflict.excluded', { items: translatedList(conflict.excludedCapabilities, 'capability') }));
   }
   if (conflict.excludedConcepts?.length) {
-    parts.push(`contains ${conflict.excludedConcepts.map(humanize).join(', ')}`);
+    parts.push(t('conflict.contains', { items: translatedList(conflict.excludedConcepts, 'ingredient-name') }));
   }
   return parts.join('; ');
 }
@@ -602,7 +605,7 @@ function renderInventoryPickerResults() {
       <article class="inventory-option-card ${selected ? 'selected' : ''}">
         <div>
           <h3>${dynamic(option.label, 'ingredient-name')}</h3>
-          <p>${escapeHtml(option.concept)} · suggested unit ${escapeHtml(option.suggestedUnit)}</p>
+          <p>${escapeHtml(option.concept)} · ${escapeHtml(t('stock.suggestedUnit', { unit: i18n.unitLabel(option.suggestedUnit, 2) }))}</p>
         </div>
         <button class="picker-add ${selected ? 'added' : ''}" type="button" data-inventory-concept="${escapeHtml(option.concept)}">
           ${selected ? escapeHtml(t('common.selected')) : escapeHtml(t('picker.stock.use'))}
@@ -806,12 +809,12 @@ function renderMeals(meals, conflicts) {
         <div class="meal-actions" role="group" aria-label="Actions for ${escapeHtml(meal.name)}">
           <button class="meal-pin" type="button" data-pin-meal-id="${escapeHtml(meal.mealId)}"
             aria-pressed="${isPinned}" aria-label="${isPinned ? 'Unpin' : 'Pin'} ${escapeHtml(meal.name)}"
-            title="${isPinned ? 'Allow this dish to change next time' : 'Keep this dish in the next menu'}">
+            title="${escapeHtml(isPinned ? t('dishes.allowChangeTitle') : t('dishes.keepTitle'))}">
             <span aria-hidden="true">📌</span><span class="meal-action-label">${escapeHtml(isPinned ? t('dishes.unpin') : t('dishes.pin'))}</span>
           </button>
           <button class="meal-reject" type="button" data-reject-meal-id="${escapeHtml(meal.mealId)}"
             aria-label="Remove ${escapeHtml(meal.name)} from future generations"
-            title="Remove this dish and exclude it from the next menu">
+            title="${escapeHtml(t('dishes.removeTitle'))}">
             <span aria-hidden="true">×</span><span class="meal-action-label">${escapeHtml(t('dishes.removeNext'))}</span>
           </button>
         </div>
@@ -873,7 +876,7 @@ function togglePinnedMeal(mealId) {
   renderPickerResults();
   renderExcludedMeals();
   renderCurrentMeals();
-  showMenuChange(`${meal.name} ${wasPinned ? 'unpinned and eligible' : 'pinned'} for the next generation.`);
+  showMenuChange(t(wasPinned ? 'dishes.statusUnpinned' : 'dishes.statusPinned', { name: i18n.cachedTranslation(meal.name, 'meal-name') }));
 }
 
 function rejectMeal(mealId) {
@@ -889,7 +892,7 @@ function rejectMeal(mealId) {
   renderPickerResults();
   renderExcludedMeals();
   renderCurrentMeals();
-  showMenuChange(`${meal.name} removed from this menu and excluded from the next generation.`, true);
+  showMenuChange(t('dishes.statusRemoved', { name: i18n.cachedTranslation(meal.name, 'meal-name') }), true);
 }
 
 function renderExcludedMeals() {
@@ -906,7 +909,7 @@ function renderExcludedMeals() {
     <strong>${escapeHtml(t('results.menuChanged'))}</strong>
     <div class="excluded-meal-list">${excluded.map(meal => `
       <span class="excluded-meal-chip">
-        ${escapeHtml(meal.name)}
+        ${dynamic(meal.name, 'meal-name')}
         <button type="button" data-undo-exclusion="${escapeHtml(meal.id)}" aria-label="Allow ${escapeHtml(meal.name)} in future generations">${escapeHtml(t('common.undo'))}</button>
       </span>
     `).join('')}</div>
@@ -919,7 +922,7 @@ function renderExcludedMeals() {
       state.excludedMealIds.delete(mealId);
       state.excludedMealNames.delete(mealId);
       renderExcludedMeals();
-      showMenuChange(`${mealName} is eligible again for the next generation.`);
+      showMenuChange(t('dishes.statusEligibleAgain', { name: i18n.cachedTranslation(mealName, 'meal-name') }));
     });
   });
 }
@@ -949,12 +952,12 @@ function renderShoppingItems(items) {
   document.querySelector('#shopping-items').innerHTML = items.map(item => `
     <tr>
       <td data-label="${escapeHtml(t('table.item'))}"><strong>${dynamic(item.name, 'product-name')}</strong><small>${escapeHtml(item.sku)}${item.originCountry ? ` · ${escapeHtml(t('table.origin'))} ${escapeHtml(item.originCountry)}` : ''} · ${quantity(item.packageSize)} / ${escapeHtml(t('table.pack'))}</small></td>
-      <td data-label="Need">${quantity(item.requiredQuantity)}</td>
-      <td data-label="Stock used">${item.inventoryUsed.amount ? quantity(item.inventoryUsed) : '—'}</td>
-      <td data-label="Packages" class="${item.packageCount === 0 ? 'covered' : ''}">${item.packageCount === 0 ? escapeHtml(t('results.covered')) : item.packageCount}</td>
-      <td data-label="Purchased">${quantity(item.purchasedQuantity)}</td>
-      <td data-label="Overbuy">${item.overbuyQuantity.amount ? quantity(item.overbuyQuantity) : '—'}</td>
-      <td data-label="Total"><strong>${formatMoney(item.lineTotal.amount)}</strong></td>
+      <td data-label="${escapeHtml(t('table.need'))}">${quantity(item.requiredQuantity)}</td>
+      <td data-label="${escapeHtml(t('table.stockUsed'))}">${item.inventoryUsed.amount ? quantity(item.inventoryUsed) : '—'}</td>
+      <td data-label="${escapeHtml(t('table.packages'))}" class="${item.packageCount === 0 ? 'covered' : ''}">${item.packageCount === 0 ? escapeHtml(t('results.covered')) : item.packageCount}</td>
+      <td data-label="${escapeHtml(t('table.purchased'))}">${quantity(item.purchasedQuantity)}</td>
+      <td data-label="${escapeHtml(t('table.overbuy'))}">${item.overbuyQuantity.amount ? quantity(item.overbuyQuantity) : '—'}</td>
+      <td data-label="${escapeHtml(t('table.total'))}"><strong>${formatMoney(item.lineTotal.amount)}</strong></td>
     </tr>
   `).join('');
 }
@@ -968,7 +971,7 @@ function renderInventory(items) {
 
 function renderTrace(requirements) {
   document.querySelector('#requirement-trace').innerHTML = requirements.map(item => `
-    <div class="trace-item"><strong>${escapeHtml(humanize(item.requirementId))}</strong><br>
+    <div class="trace-item"><strong>${dynamic(humanize(item.requirementId), 'requirement')}</strong><br>
       <span>${item.selectedCandidateName ? dynamic(item.selectedCandidateName, item.type === 'meal' ? 'meal-name' : 'product-name') : escapeHtml(t('results.notFulfilled'))} · ${quantity(item.targetQuantity)} · ${(item.matchedCapabilities || []).map(value => dynamic(humanize(value), 'capability')).join(', ')}</span>
     </div>
   `).join('');
@@ -1145,7 +1148,7 @@ function catalogScores(scores) {
         const priority = priorityDefinition(key);
         const normalized = clamp(Number(value), 0, 1);
         return `
-          <div class="catalog-score" title="${escapeHtml(priority.description)}">
+          <div class="catalog-score" title="${escapeHtml(i18n.cachedTranslation(priority.description, 'priority-description'))}">
             <span><i>${dynamic(priority.label, 'priority-label')}</i><b>${Math.round(normalized * 100)}</b></span>
             <progress max="1" value="${normalized}">${Math.round(normalized * 100)}%</progress>
           </div>
