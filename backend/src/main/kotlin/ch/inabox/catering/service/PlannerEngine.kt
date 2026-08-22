@@ -36,8 +36,8 @@ class PlannerEngine {
         template: EventTemplate,
         meals: List<Meal>,
         products: List<Product>,
-        selectedConstraints: List<DietaryConstraintDefinition>,
         request: ResolvePlanRequest,
+        selectedConstraints: List<DietaryConstraintDefinition> = emptyList(),
     ): ShoppingPlan {
         validateRequest(request)
 

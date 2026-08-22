@@ -1,6 +1,7 @@
 package ch.inabox.catering.service
 
 import ch.inabox.catering.model.CustomerPreferences
+import ch.inabox.catering.model.DietaryConstraintDefinition
 import ch.inabox.catering.model.EventTemplate
 import ch.inabox.catering.model.HardConstraints
 import ch.inabox.catering.model.Ingredient
@@ -321,7 +322,7 @@ class PlannerEngineTest {
     }
 
     @Test
-    fun `required meal conflicting with hard constraints is rejected`() {
+    fun `required meal conflicting with a selected constraint is kept and flagged`() {
         val template = EventTemplate(
             templateId = "required-conflict",
             name = "Required conflict",
@@ -329,24 +330,41 @@ class PlannerEngineTest {
             requirements = listOf(requirement("savory", "meal", setOf("savory"), 1.0, "servings-per-guest")),
             weights = mapOf("price" to 1.0),
         )
+        val veganMeal = meal("vegan-savory", setOf("savory", "vegan"), "vegan-food", 0.9)
         val meatMeal = meal("meat-quiche", setOf("savory"), "quiche-food", 0.8)
+        val veganConstraint = DietaryConstraintDefinition(
+            constraintId = "vegan",
+            label = "Vegan",
+            description = "Requires every automatically selected meal to be vegan.",
+            requiredCapabilities = setOf("vegan"),
+        )
 
-        val exception = assertThrows<PlanResolutionException> {
-            engine.resolve(
-                template,
-                listOf(meatMeal),
-                listOf(product("quiche-food", "quiche-food", 10.0, "piece", 5.0)),
-                ResolvePlanRequest(
-                    templateId = template.templateId,
-                    guestCount = 10,
-                    budget = 100.0,
-                    requiredMealIds = setOf("meat-quiche"),
-                    hardConstraints = HardConstraints(requiredCapabilities = setOf("vegan")),
-                ),
-            )
-        }
+        val plan = engine.resolve(
+            template,
+            listOf(veganMeal, meatMeal),
+            listOf(
+                product("vegan-food", "vegan-food", 10.0, "piece", 5.0),
+                product("quiche-food", "quiche-food", 10.0, "piece", 5.0),
+            ),
+            ResolvePlanRequest(
+                templateId = template.templateId,
+                guestCount = 10,
+                budget = 100.0,
+                requiredMealIds = setOf("meat-quiche"),
+                hardConstraints = HardConstraints(requiredCapabilities = setOf("vegan")),
+            ),
+            selectedConstraints = listOf(veganConstraint),
+        )
 
-        assertTrue(exception.message!!.contains("does not satisfy hard capabilities"))
+        assertEquals(listOf("vegan-savory", "meat-quiche"), plan.selectedMeals.map { it.mealId })
+        assertTrue(plan.selectedMeals.single { it.mealId == "meat-quiche" }.guaranteed)
+
+        val conflict = plan.constraintConflicts.single()
+        assertEquals("meat-quiche", conflict.mealId)
+        assertEquals("vegan", conflict.constraintId)
+        assertTrue(conflict.guaranteed)
+        assertEquals(setOf("vegan"), conflict.missingRequiredCapabilities)
+        assertTrue(plan.warnings.any { it.contains("meat-quiche", ignoreCase = true) || it.contains("Vegan") })
     }
 
     private fun requirement(
