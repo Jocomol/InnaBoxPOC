@@ -42,79 +42,76 @@ class PlannerEngine {
             preferredCapabilities = normalizeCapabilities(request.preferences.preferredCapabilities),
         )
         val weights = resolveWeights(template.weights, request.weights)
+        val capabilityShares = normalizeCapabilityShares(request.capabilityShares)
+        val desiredMealCount = resolveMealCount(template, request.mealCount)
         val requiredMeals = resolveRequiredMeals(request.requiredMealIds, meals, constraints)
         val requiredMealsById = requiredMeals.associateBy { it.mealId }
-        val unassignedRequiredMealIds = requiredMealsById.keys.toSortedSet()
-        val assignedMealIds = mutableSetOf<String>()
         val warnings = mutableListOf<String>()
         val selectedMeals = mutableListOf<SelectedMeal>()
         val fulfilledRequirements = mutableListOf<FulfilledRequirement>()
         val ingredientNeeds = linkedMapOf<Pair<String, String>, IngredientAccumulator>()
         val productNeeds = linkedMapOf<String, ProductAccumulator>()
 
-        val mealSelections = template.requirements
-            .filter { it.type.equals("meal", ignoreCase = true) }
-            .mapNotNull { requirement ->
-                val requiredCapabilities = normalizeCapabilities(requirement.requiredCapabilities) + constraints.requiredCapabilities
-                val candidates = meals.asSequence()
-                    .filter { normalizeCapabilities(it.capabilities).containsAll(requiredCapabilities) }
-                    .filter { normalizeCapabilities(it.capabilities).intersect(constraints.excludedCapabilities).isEmpty() }
-                    .toList()
-
-                val forcedCandidates = candidates.filter { it.mealId in unassignedRequiredMealIds }
-                val unusedCandidates = candidates.filter { it.mealId !in assignedMealIds }
-                val selectionCandidates = when {
-                    forcedCandidates.isNotEmpty() -> forcedCandidates
-                    unusedCandidates.isNotEmpty() -> unusedCandidates
-                    else -> candidates
-                }
-                val scored = selectMeal(selectionCandidates, weights, preferences)
-                if (scored == null) {
-                    handleMissingRequirement(requirement, requiredCapabilities, request.guestCount, warnings, fulfilledRequirements)
-                    return@mapNotNull null
-                }
-                assignedMealIds += scored.candidate.mealId
-                unassignedRequiredMealIds -= scored.candidate.mealId
-
-                MealSelection(
-                    requirement = requirement,
-                    requiredCapabilities = requiredCapabilities,
-                    scored = scored,
-                    target = mealTarget(requirement, template, request.guestCount, scored.candidate, preferences),
-                )
-            }
-            .toMutableList()
-
-        unassignedRequiredMealIds.forEach { mealId ->
-            val meal = requiredMealsById.getValue(mealId)
-            val requirement = TemplateRequirement(
-                requirementId = "guaranteed-$mealId",
-                type = "meal",
-                requiredCapabilities = constraints.requiredCapabilities,
-                target = RequirementTarget(amount = 1.0, unit = "servings-per-guest"),
-                required = true,
+        val enhancedMealPlanning = desiredMealCount != null || capabilityShares.isNotEmpty()
+        val selectionOutcome = if (enhancedMealPlanning) {
+            selectEnhancedMeals(
+                template = template,
+                meals = meals,
+                requiredMeals = requiredMeals,
+                desiredMealCount = desiredMealCount,
+                capabilityShares = capabilityShares,
+                constraints = constraints,
+                preferences = preferences,
+                weights = weights,
+                request = request,
+                warnings = warnings,
+                fulfilledRequirements = fulfilledRequirements,
             )
-            mealSelections += MealSelection(
-                requirement = requirement,
-                requiredCapabilities = constraints.requiredCapabilities,
-                scored = selectMeal(listOf(meal), weights, preferences)!!,
-                target = mealTarget(requirement, template, request.guestCount, meal, preferences),
+        } else {
+            selectLegacyMeals(
+                template = template,
+                meals = meals,
+                requiredMeals = requiredMeals,
+                constraints = constraints,
+                preferences = preferences,
+                weights = weights,
+                guestCount = request.guestCount,
+                warnings = warnings,
+                fulfilledRequirements = fulfilledRequirements,
             )
         }
-
-        val mealTargets = applyServingsOverride(mealSelections, request.guestCount, request.servingsPerGuest)
+        val mealSelections = selectionOutcome.selections
+        val mealTargets = if (enhancedMealPlanning) {
+            allocateEnhancedMealTargets(
+                selections = mealSelections,
+                totalServings = selectionOutcome.totalServings,
+                guestCount = request.guestCount,
+                servingsPerGuest = request.servingsPerGuest,
+                capabilityShares = capabilityShares,
+                warnings = warnings,
+            )
+        } else {
+            applyServingsOverride(mealSelections, request.guestCount, request.servingsPerGuest)
+        }
+        val targetByMealId = mealSelections.zip(mealTargets).associate { (selection, target) ->
+            selection.scored.candidate.mealId to target
+        }
         mealSelections.zip(mealTargets).forEach { (selection, target) ->
             val requirement = selection.requirement
             val scored = selection.scored
             val requiredCapabilities = selection.requiredCapabilities
-            val matched = requiredCapabilities.intersect(normalizeCapabilities(scored.candidate.capabilities)).toSortedSet()
+            val mealCapabilities = normalizeCapabilities(scored.candidate.capabilities)
+            val matchedRequirementCapabilities = requiredCapabilities.intersect(mealCapabilities).toSortedSet()
+            val matchedSelectionCapabilities = (requiredCapabilities + capabilityShares.keys)
+                .intersect(mealCapabilities)
+                .toSortedSet()
             selectedMeals += SelectedMeal(
                 requirementId = requirement.requirementId,
                 mealId = scored.candidate.mealId,
                 name = scored.candidate.name,
                 servings = target.servings,
                 targetQuantity = target.quantity,
-                matchedCapabilities = matched,
+                matchedCapabilities = matchedSelectionCapabilities,
                 preferenceMatches = scored.preferenceMatches,
                 scoreComponents = scored.components,
                 finalWeightedScore = decimal(scored.weightedScore, 4),
@@ -124,7 +121,7 @@ class PlannerEngine {
                 type = "meal",
                 required = requirement.required,
                 requiredCapabilities = normalizeCapabilities(requirement.requiredCapabilities).toSortedSet(),
-                matchedCapabilities = matched,
+                matchedCapabilities = matchedRequirementCapabilities,
                 targetQuantity = target.quantity,
                 selectedCandidateId = scored.candidate.mealId,
                 selectedCandidateName = scored.candidate.name,
@@ -140,6 +137,26 @@ class PlannerEngine {
                 accumulator.amountBase += base.amount
                 accumulator.sourceMealIds += scored.candidate.mealId
             }
+        }
+
+        selectionOutcome.additionalRequirementMatches.forEach { match ->
+            val selection = mealSelections.single { it.scored.candidate.mealId == match.mealId }
+            val meal = selection.scored.candidate
+            val target = targetByMealId.getValue(match.mealId)
+            val matchedCapabilities = match.requiredCapabilities
+                .intersect(normalizeCapabilities(meal.capabilities))
+                .toSortedSet()
+            fulfilledRequirements += FulfilledRequirement(
+                requirementId = match.requirement.requirementId,
+                type = "meal",
+                required = match.requirement.required,
+                requiredCapabilities = normalizeCapabilities(match.requirement.requiredCapabilities).toSortedSet(),
+                matchedCapabilities = matchedCapabilities,
+                targetQuantity = target.quantity,
+                selectedCandidateId = meal.mealId,
+                selectedCandidateName = meal.name,
+                fulfilled = true,
+            )
         }
 
         val productRequirements = template.requirements.filter { it.type.equals("product", ignoreCase = true) }
@@ -250,6 +267,17 @@ class PlannerEngine {
         if (request.servingsPerGuest != null && request.servingsPerGuest !in 1..10) {
             throw IllegalArgumentException("Servings per guest must be between 1 and 10")
         }
+        if (request.mealCount != null && request.mealCount <= 0) {
+            throw IllegalArgumentException("Meal count must be greater than zero")
+        }
+        request.capabilityShares.toSortedMap().forEach { (capability, share) ->
+            if (capability.isBlank()) {
+                throw IllegalArgumentException("Capability share names must not be blank")
+            }
+            if (!share.isFinite() || share !in 0.0..1.0) {
+                throw IllegalArgumentException("Capability share '$capability' must be between 0.0 and 1.0")
+            }
+        }
         if (request.requiredMealIds.any { it.isBlank() }) {
             throw IllegalArgumentException("Required meal IDs must not be blank")
         }
@@ -259,6 +287,286 @@ class PlannerEngine {
             throw IllegalArgumentException("Capabilities cannot be both required and excluded: ${overlap.sorted().joinToString()}")
         }
     }
+
+    private fun normalizeCapabilityShares(shares: Map<String, Double>): Map<String, Double> {
+        val normalized = sortedMapOf<String, Double>()
+        shares.entries.sortedBy { it.key }.forEach { (capability, share) ->
+            val key = capability.trim().lowercase()
+            normalized[key] = max(normalized[key] ?: 0.0, share)
+        }
+        return normalized
+    }
+
+    private fun resolveMealCount(template: EventTemplate, requestMealCount: Int?): Int? {
+        requestMealCount?.let { return it }
+        val configured = template.defaults["mealCount"] ?: return null
+        if (!configured.isFinite() || configured <= 0.0 || configured > Int.MAX_VALUE || configured % 1.0 != 0.0) {
+            throw PlanResolutionException(
+                "Template '${template.templateId}' default mealCount must be a positive whole number",
+            )
+        }
+        return configured.toInt()
+    }
+
+    private fun selectLegacyMeals(
+        template: EventTemplate,
+        meals: List<Meal>,
+        requiredMeals: List<Meal>,
+        constraints: HardConstraints,
+        preferences: CustomerPreferences,
+        weights: Map<String, Double>,
+        guestCount: Int,
+        warnings: MutableList<String>,
+        fulfilledRequirements: MutableList<FulfilledRequirement>,
+    ): MealSelectionOutcome {
+        val requiredMealsById = requiredMeals.associateBy { it.mealId }
+        val unassignedRequiredMealIds = requiredMealsById.keys.toSortedSet()
+        val assignedMealIds = mutableSetOf<String>()
+        val selections = template.requirements
+            .filter { it.type.equals("meal", ignoreCase = true) }
+            .mapNotNull { requirement ->
+                val requiredCapabilities = normalizeCapabilities(requirement.requiredCapabilities) + constraints.requiredCapabilities
+                val candidates = meals.asSequence()
+                    .filter { normalizeCapabilities(it.capabilities).containsAll(requiredCapabilities) }
+                    .filter { normalizeCapabilities(it.capabilities).intersect(constraints.excludedCapabilities).isEmpty() }
+                    .toList()
+
+                val forcedCandidates = candidates.filter { it.mealId in unassignedRequiredMealIds }
+                val unusedCandidates = candidates.filter { it.mealId !in assignedMealIds }
+                val selectionCandidates = when {
+                    forcedCandidates.isNotEmpty() -> forcedCandidates
+                    unusedCandidates.isNotEmpty() -> unusedCandidates
+                    else -> candidates
+                }
+                val scored = selectMeal(selectionCandidates, weights, preferences)
+                if (scored == null) {
+                    handleMissingRequirement(requirement, requiredCapabilities, guestCount, warnings, fulfilledRequirements)
+                    return@mapNotNull null
+                }
+                assignedMealIds += scored.candidate.mealId
+                unassignedRequiredMealIds -= scored.candidate.mealId
+                val target = mealTarget(requirement, template, guestCount, scored.candidate, preferences)
+
+                MealSelection(
+                    requirement = requirement,
+                    requiredCapabilities = requiredCapabilities,
+                    scored = scored,
+                    target = target,
+                    allocationWeight = target.servings.coerceAtLeast(1).toDouble(),
+                )
+            }
+            .toMutableList()
+
+        unassignedRequiredMealIds.forEach { mealId ->
+            val meal = requiredMealsById.getValue(mealId)
+            val requirement = guaranteedMealRequirement(mealId, constraints)
+            val target = mealTarget(requirement, template, guestCount, meal, preferences)
+            selections += MealSelection(
+                requirement = requirement,
+                requiredCapabilities = constraints.requiredCapabilities,
+                scored = selectMeal(listOf(meal), weights, preferences)!!,
+                target = target,
+                allocationWeight = target.servings.coerceAtLeast(1).toDouble(),
+            )
+        }
+
+        return MealSelectionOutcome(selections = selections)
+    }
+
+    private fun selectEnhancedMeals(
+        template: EventTemplate,
+        meals: List<Meal>,
+        requiredMeals: List<Meal>,
+        desiredMealCount: Int?,
+        capabilityShares: Map<String, Double>,
+        constraints: HardConstraints,
+        preferences: CustomerPreferences,
+        weights: Map<String, Double>,
+        request: ResolvePlanRequest,
+        warnings: MutableList<String>,
+        fulfilledRequirements: MutableList<FulfilledRequirement>,
+    ): MealSelectionOutcome {
+        val validMeals = meals.asSequence()
+            .distinctBy { it.mealId }
+            .filter { mealAllowed(it, constraints) }
+            .sortedBy { it.mealId }
+            .toList()
+        val requiredMealsById = requiredMeals.associateBy { it.mealId }
+        val unassignedRequiredMealIds = requiredMealsById.keys.toSortedSet()
+        val selectedById = linkedMapOf<String, MealSelection>()
+        val additionalMatches = mutableListOf<RequirementMatch>()
+        var baselineTotalServings = 0
+
+        fun missingShares(): Map<String, Double> {
+            val represented = selectedById.values.asSequence()
+                .flatMap { normalizeCapabilities(it.scored.candidate.capabilities).asSequence() }
+                .toSet()
+            return capabilityShares.filter { (capability, share) -> share > 0.0 && capability !in represented }
+        }
+
+        fun addSelection(
+            scored: ScoredCandidate<Meal>,
+            requirement: TemplateRequirement,
+            requiredCapabilities: Set<String>,
+            target: MealTarget,
+            contributesToBaseline: Boolean,
+        ) {
+            selectedById[scored.candidate.mealId] = MealSelection(
+                requirement = requirement,
+                requiredCapabilities = requiredCapabilities,
+                scored = scored,
+                target = target,
+                allocationWeight = if (contributesToBaseline) target.servings.coerceAtLeast(1).toDouble() else 0.0,
+            )
+        }
+
+        template.requirements.filter { it.type.equals("meal", ignoreCase = true) }.forEach { requirement ->
+            val requiredCapabilities = normalizeCapabilities(requirement.requiredCapabilities) + constraints.requiredCapabilities
+            val candidates = validMeals.filter { meal ->
+                normalizeCapabilities(meal.capabilities).containsAll(requiredCapabilities)
+            }
+            val forcedCandidates = candidates.filter { it.mealId in unassignedRequiredMealIds }
+            val unusedCandidates = candidates.filter { it.mealId !in selectedById }
+            val alreadySelectedCandidates = candidates.filter { it.mealId in selectedById }
+            val hasCapacity = desiredMealCount == null || selectedById.size < desiredMealCount
+            val chosen = when {
+                forcedCandidates.isNotEmpty() ->
+                    selectMealForCapabilities(forcedCandidates, missingShares(), capabilityShares, weights, preferences)
+                unusedCandidates.isNotEmpty() && hasCapacity ->
+                    selectMealForCapabilities(unusedCandidates, missingShares(), capabilityShares, weights, preferences)
+                alreadySelectedCandidates.isNotEmpty() ->
+                    selectMealForCapabilities(alreadySelectedCandidates, missingShares(), capabilityShares, weights, preferences)
+                requirement.required && unusedCandidates.isNotEmpty() ->
+                    selectMealForCapabilities(unusedCandidates, missingShares(), capabilityShares, weights, preferences)
+                else -> null
+            }
+            if (chosen == null) {
+                handleMissingRequirement(
+                    requirement,
+                    requiredCapabilities,
+                    request.guestCount,
+                    warnings,
+                    fulfilledRequirements,
+                )
+                return@forEach
+            }
+
+            val target = mealTarget(requirement, template, request.guestCount, chosen.candidate, preferences)
+            baselineTotalServings += target.servings
+            val existing = selectedById[chosen.candidate.mealId]
+            if (existing == null) {
+                addSelection(chosen, requirement, requiredCapabilities, target, contributesToBaseline = true)
+            } else {
+                existing.allocationWeight += target.servings.coerceAtLeast(1)
+                additionalMatches += RequirementMatch(requirement, requiredCapabilities, chosen.candidate.mealId)
+            }
+            unassignedRequiredMealIds -= chosen.candidate.mealId
+        }
+
+        unassignedRequiredMealIds.forEach { mealId ->
+            val meal = requiredMealsById.getValue(mealId)
+            val requirement = guaranteedMealRequirement(mealId, constraints)
+            val target = mealTarget(requirement, template, request.guestCount, meal, preferences)
+            baselineTotalServings += target.servings
+            addSelection(
+                scored = selectMeal(listOf(meal), weights, preferences)!!,
+                requirement = requirement,
+                requiredCapabilities = constraints.requiredCapabilities,
+                target = target,
+                contributesToBaseline = true,
+            )
+        }
+
+        val totalServings = request.servingsPerGuest
+            ?.let { request.guestCount * it }
+            ?: baselineTotalServings.takeIf { it > 0 }
+            ?: request.guestCount
+        if (selectedById.size > totalServings) {
+            throw PlanResolutionException(
+                "Cannot allocate $totalServings total servings across ${selectedById.size} required distinct meals",
+            )
+        }
+
+        val selectionLimit = desiredMealCount?.coerceAtMost(totalServings) ?: totalServings
+        if (desiredMealCount != null && desiredMealCount > totalServings) {
+            warnings += "Requested $desiredMealCount distinct meals, but $totalServings total servings allow at most $totalServings meals."
+        }
+
+        while (missingShares().isNotEmpty() && selectedById.size < selectionLimit) {
+            val missing = missingShares()
+            val candidates = validMeals.filter { meal ->
+                meal.mealId !in selectedById &&
+                    normalizeCapabilities(meal.capabilities).any { it in missing }
+            }
+            val chosen = selectMealForCapabilities(candidates, missing, capabilityShares, weights, preferences) ?: break
+            val requirement = additionalMealRequirement(chosen.candidate.mealId, constraints)
+            addSelection(
+                scored = chosen,
+                requirement = requirement,
+                requiredCapabilities = constraints.requiredCapabilities,
+                target = MealTarget(Quantity(1.0, "serving"), 1),
+                contributesToBaseline = false,
+            )
+        }
+
+        while (desiredMealCount != null && selectedById.size < selectionLimit) {
+            val candidates = validMeals.filter { it.mealId !in selectedById }
+            val chosen = selectMealForCapabilities(
+                candidates,
+                emptyMap(),
+                capabilityShares,
+                weights,
+                preferences,
+            ) ?: break
+            val requirement = additionalMealRequirement(chosen.candidate.mealId, constraints)
+            addSelection(
+                scored = chosen,
+                requirement = requirement,
+                requiredCapabilities = constraints.requiredCapabilities,
+                target = MealTarget(Quantity(1.0, "serving"), 1),
+                contributesToBaseline = false,
+            )
+        }
+
+        if (desiredMealCount != null && selectedById.size > desiredMealCount) {
+            warnings += "Requested $desiredMealCount distinct meals, but ${selectedById.size} are needed to preserve required meals and mandatory template requirements."
+        }
+        val attainableGoal = desiredMealCount?.coerceAtMost(totalServings)
+        if (attainableGoal != null && selectedById.size < attainableGoal) {
+            warnings += "Requested $desiredMealCount distinct meals, but only ${selectedById.size} valid distinct meals were available."
+        }
+
+        val fallbackWeight = selectedById.values
+            .map { it.allocationWeight }
+            .filter { it > 0.0 }
+            .average()
+            .takeIf { it.isFinite() }
+            ?: 1.0
+        selectedById.values.filter { it.allocationWeight <= 0.0 }.forEach {
+            it.allocationWeight = fallbackWeight
+        }
+
+        return MealSelectionOutcome(
+            selections = selectedById.values.toMutableList(),
+            additionalRequirementMatches = additionalMatches,
+            totalServings = totalServings,
+        )
+    }
+
+    private fun guaranteedMealRequirement(mealId: String, constraints: HardConstraints) = TemplateRequirement(
+        requirementId = "guaranteed-$mealId",
+        type = "meal",
+        requiredCapabilities = constraints.requiredCapabilities,
+        target = RequirementTarget(amount = 1.0, unit = "servings-per-guest"),
+        required = true,
+    )
+
+    private fun additionalMealRequirement(mealId: String, constraints: HardConstraints) = TemplateRequirement(
+        requirementId = "additional-$mealId",
+        type = "meal",
+        requiredCapabilities = constraints.requiredCapabilities,
+        required = false,
+    )
 
     private fun resolveRequiredMeals(
         requestedIds: Set<String>,
@@ -322,6 +630,14 @@ class PlannerEngine {
     private fun normalizeCapabilities(capabilities: Collection<String>): Set<String> =
         capabilities.map { it.trim().lowercase() }.filter { it.isNotBlank() }.toSortedSet()
 
+    private fun mealAllowed(meal: Meal, constraints: HardConstraints): Boolean {
+        val capabilities = normalizeCapabilities(meal.capabilities)
+        val ingredientConcepts = meal.ingredients.map { it.concept.trim().lowercase() }.toSet()
+        return capabilities.containsAll(constraints.requiredCapabilities) &&
+            capabilities.intersect(constraints.excludedCapabilities).isEmpty() &&
+            ingredientConcepts.intersect(constraints.excludedConcepts).isEmpty()
+    }
+
     private fun productAllowed(product: Product, constraints: HardConstraints): Boolean =
         product.concept.lowercase() !in constraints.excludedConcepts &&
             normalizeCapabilities(product.capabilities).intersect(constraints.excludedCapabilities).isEmpty()
@@ -333,6 +649,32 @@ class PlannerEngine {
     ): ScoredCandidate<Meal>? = candidates.map { candidate ->
         score(candidate, candidate.mealId, candidate.scores, candidate.capabilities, weights, preferences)
     }.sortedWith(scoredComparator()).firstOrNull()
+
+    private fun selectMealForCapabilities(
+        candidates: List<Meal>,
+        priorityCapabilityShares: Map<String, Double>,
+        allCapabilityShares: Map<String, Double>,
+        weights: Map<String, Double>,
+        preferences: CustomerPreferences,
+    ): ScoredCandidate<Meal>? = candidates.map { candidate ->
+        score(candidate, candidate.mealId, candidate.scores, candidate.capabilities, weights, preferences)
+    }.sortedWith(
+        compareByDescending<ScoredCandidate<Meal>> { scored ->
+            val capabilities = normalizeCapabilities(scored.candidate.capabilities)
+            priorityCapabilityShares.filterKeys { it in capabilities }.values.sum()
+        }.thenByDescending { scored ->
+            val capabilities = normalizeCapabilities(scored.candidate.capabilities)
+            priorityCapabilityShares.keys.count { it in capabilities }
+        }.thenByDescending { scored ->
+            val capabilities = normalizeCapabilities(scored.candidate.capabilities)
+            allCapabilityShares.filterKeys { it in capabilities }.values.sum()
+        }.thenByDescending { scored ->
+            val capabilities = normalizeCapabilities(scored.candidate.capabilities)
+            allCapabilityShares.keys.count { it in capabilities }
+        }.thenByDescending { it.weightedScore }
+            .thenByDescending { it.preferenceMatches.size }
+            .thenBy { it.id },
+    ).firstOrNull()
 
     private fun selectProduct(
         candidates: List<Product>,
@@ -364,6 +706,160 @@ class PlannerEngine {
         compareByDescending<ScoredCandidate<T>> { it.weightedScore }
             .thenByDescending { it.preferenceMatches.size }
             .thenBy { it.id }
+
+    private fun allocateEnhancedMealTargets(
+        selections: List<MealSelection>,
+        totalServings: Int,
+        guestCount: Int,
+        servingsPerGuest: Int?,
+        capabilityShares: Map<String, Double>,
+        warnings: MutableList<String>,
+    ): List<MealTarget> {
+        if (selections.isEmpty()) {
+            val positiveShares = capabilityShares.filterValues { it > 0.0 }
+            if (positiveShares.isNotEmpty()) {
+                handleCapabilityShortfalls(
+                    requiredServings = positiveShares.mapValues { (_, share) -> ceil(totalServings * share).toInt() },
+                    providedServings = positiveShares.mapValues { 0 },
+                    totalServings = totalServings,
+                    guestCount = guestCount,
+                    servingsPerGuest = servingsPerGuest,
+                    capabilityShares = positiveShares,
+                    warnings = warnings,
+                )
+            }
+            return emptyList()
+        }
+        if (selections.size > totalServings) {
+            throw PlanResolutionException(
+                "Cannot allocate $totalServings total servings across ${selections.size} distinct meals",
+            )
+        }
+
+        val mealCapabilities = selections.map { normalizeCapabilities(it.scored.candidate.capabilities) }
+        val allocations = IntArray(selections.size) { 1 }
+        val requiredServings = capabilityShares
+            .filterValues { it > 0.0 }
+            .mapValues { (_, share) -> ceil(totalServings * share).toInt() }
+        val providedServings = requiredServings.keys.associateWithTo(linkedMapOf()) { capability ->
+            allocations.indices.sumOf { index ->
+                if (capability in mealCapabilities[index]) allocations[index] else 0
+            }
+        }
+        var remaining = totalServings - allocations.sum()
+
+        while (remaining > 0 && requiredServings.any { (capability, target) ->
+                providedServings.getValue(capability) < target
+            }
+        ) {
+            var bestIndex = -1
+            var bestUtility = 0.0
+            var bestCoverage = 0
+            for (index in selections.indices) {
+                var utility = 0.0
+                var coverage = 0
+                requiredServings.forEach { (capability, target) ->
+                    val deficit = target - providedServings.getValue(capability)
+                    if (deficit > 0 && capability in mealCapabilities[index]) {
+                        utility += deficit.toDouble() / target
+                        coverage += 1
+                    }
+                }
+                val currentBest = bestIndex.takeIf { it >= 0 }?.let { selections[it] }
+                val selection = selections[index]
+                val isBetter = utility > bestUtility + 0.000_000_1 ||
+                    (kotlin.math.abs(utility - bestUtility) <= 0.000_000_1 && coverage > bestCoverage) ||
+                    (kotlin.math.abs(utility - bestUtility) <= 0.000_000_1 && coverage == bestCoverage &&
+                        currentBest != null && selection.scored.weightedScore > currentBest.scored.weightedScore) ||
+                    (kotlin.math.abs(utility - bestUtility) <= 0.000_000_1 && coverage == bestCoverage &&
+                        currentBest != null && selection.scored.weightedScore == currentBest.scored.weightedScore &&
+                        selection.scored.candidate.mealId < currentBest.scored.candidate.mealId)
+                if (isBetter) {
+                    bestIndex = index
+                    bestUtility = utility
+                    bestCoverage = coverage
+                }
+            }
+            if (bestIndex < 0 || bestUtility <= 0.0) break
+            allocations[bestIndex] += 1
+            remaining -= 1
+            requiredServings.keys.forEach { capability ->
+                if (capability in mealCapabilities[bestIndex]) {
+                    providedServings[capability] = providedServings.getValue(capability) + 1
+                }
+            }
+        }
+
+        if (remaining > 0) {
+            val rawWeights = selections.map { it.allocationWeight.coerceAtLeast(0.0) }
+            val effectiveWeights = if (rawWeights.sum() > 0.0) rawWeights else selections.map { 1.0 }
+            val weightTotal = effectiveWeights.sum()
+            val rawExtras = effectiveWeights.map { it / weightTotal * remaining }
+            rawExtras.forEachIndexed { index, raw -> allocations[index] += floor(raw).toInt() }
+            var remainder = totalServings - allocations.sum()
+            val remainderOrder = selections.indices.sortedWith(
+                compareByDescending<Int> { rawExtras[it] - floor(rawExtras[it]) }
+                    .thenBy { selections[it].scored.candidate.mealId },
+            )
+            var orderIndex = 0
+            while (remainder > 0) {
+                allocations[remainderOrder[orderIndex % remainderOrder.size]] += 1
+                orderIndex += 1
+                remainder -= 1
+            }
+        }
+
+        val finalProvidedServings = requiredServings.keys.associateWith { capability ->
+            allocations.indices.sumOf { index ->
+                if (capability in mealCapabilities[index]) allocations[index] else 0
+            }
+        }
+        handleCapabilityShortfalls(
+            requiredServings = requiredServings,
+            providedServings = finalProvidedServings,
+            totalServings = totalServings,
+            guestCount = guestCount,
+            servingsPerGuest = servingsPerGuest,
+            capabilityShares = capabilityShares,
+            warnings = warnings,
+        )
+
+        return selections.mapIndexed { index, selection ->
+            resizeMealTarget(selection.target, selection.scored.candidate, allocations[index])
+        }
+    }
+
+    private fun handleCapabilityShortfalls(
+        requiredServings: Map<String, Int>,
+        providedServings: Map<String, Int>,
+        totalServings: Int,
+        guestCount: Int,
+        servingsPerGuest: Int?,
+        capabilityShares: Map<String, Double>,
+        warnings: MutableList<String>,
+    ) {
+        val shortfalls = requiredServings.toSortedMap().mapNotNull { (capability, required) ->
+            val provided = providedServings[capability] ?: 0
+            if (provided >= required) return@mapNotNull null
+            val requestedShare = capabilityShares.getValue(capability)
+            "Capability '$capability' requires ${formatPercent(requestedShare)} " +
+                "($required of $totalServings servings), but only $provided servings " +
+                "(${formatPercent(provided.toDouble() / totalServings)}) can be provided."
+        }
+        if (shortfalls.isEmpty()) return
+
+        val effectiveServingsPerGuest = servingsPerGuest
+            ?: ceil(totalServings.toDouble() / guestCount).toInt().coerceAtLeast(1)
+        if (effectiveServingsPerGuest <= 2) {
+            throw PlanResolutionException(
+                "Cannot fulfill capability shares for a meal-like plan: ${shortfalls.joinToString(" ")}",
+            )
+        }
+        warnings += shortfalls
+    }
+
+    private fun formatPercent(share: Double): String =
+        String.format(java.util.Locale.ROOT, "%.1f%%", share * 100.0)
 
     private fun applyServingsOverride(
         selections: List<MealSelection>,
@@ -577,6 +1073,19 @@ class PlannerEngine {
         val requiredCapabilities: Set<String>,
         val scored: ScoredCandidate<Meal>,
         val target: MealTarget,
+        var allocationWeight: Double,
+    )
+
+    private data class MealSelectionOutcome(
+        val selections: MutableList<MealSelection>,
+        val additionalRequirementMatches: List<RequirementMatch> = emptyList(),
+        val totalServings: Int = 0,
+    )
+
+    private data class RequirementMatch(
+        val requirement: TemplateRequirement,
+        val requiredCapabilities: Set<String>,
+        val mealId: String,
     )
 
     private data class ScoredCandidate<T>(

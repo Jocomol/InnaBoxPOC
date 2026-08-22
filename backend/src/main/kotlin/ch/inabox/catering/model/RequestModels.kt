@@ -33,6 +33,8 @@ data class ResolvePlanRequest(
     @field:Min(1) @field:Max(10_000) val guestCount: Int,
     @field:PositiveOrZero val budget: Double,
     @field:Min(1) @field:Max(10) val servingsPerGuest: Int? = null,
+    @field:Positive val mealCount: Int? = null,
+    val capabilityShares: Map<String, Double> = emptyMap(),
     val requiredMealIds: Set<String> = emptySet(),
     @field:Valid val preferences: CustomerPreferences = CustomerPreferences(),
     val weights: Map<String, Double> = emptyMap(),

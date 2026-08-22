@@ -349,6 +349,226 @@ class PlannerEngineTest {
         assertTrue(exception.message!!.contains("does not satisfy hard capabilities"))
     }
 
+    @Test
+    fun `requested meal count selects distinct meals without multiplying servings and preserves required meals`() {
+        val template = broadMealTemplate()
+        val meals = (1..6).map { index ->
+            meal(
+                id = "meal-$index",
+                capabilities = setOf("savory"),
+                ingredientConcept = "food-$index",
+                priceScore = 1.0 - index * 0.1,
+            )
+        }
+        val products = productsFor(meals)
+
+        val plan = engine.resolve(
+            template,
+            meals,
+            products,
+            ResolvePlanRequest(
+                templateId = template.templateId,
+                guestCount = 100,
+                budget = 10_000.0,
+                servingsPerGuest = 4,
+                mealCount = 5,
+                requiredMealIds = setOf("meal-6"),
+            ),
+        )
+
+        assertEquals(5, plan.selectedMeals.size)
+        assertEquals(5, plan.selectedMeals.map { it.mealId }.distinct().size)
+        assertTrue(plan.selectedMeals.any { it.mealId == "meal-6" })
+        assertEquals(400, plan.selectedMeals.sumOf { it.servings })
+    }
+
+    @Test
+    fun `template meal count is used and request meal count overrides it`() {
+        val template = broadMealTemplate(defaultMealCount = 3.0)
+        val meals = (1..4).map { index ->
+            meal("meal-$index", setOf("savory"), "food-$index", 1.0 - index * 0.1)
+        }
+        val products = productsFor(meals)
+
+        val templateDefaultPlan = engine.resolve(
+            template,
+            meals,
+            products,
+            ResolvePlanRequest(
+                templateId = template.templateId,
+                guestCount = 10,
+                budget = 1_000.0,
+                servingsPerGuest = 2,
+            ),
+        )
+        val requestOverridePlan = engine.resolve(
+            template,
+            meals,
+            products,
+            ResolvePlanRequest(
+                templateId = template.templateId,
+                guestCount = 10,
+                budget = 1_000.0,
+                servingsPerGuest = 2,
+                mealCount = 2,
+            ),
+        )
+
+        assertEquals(3, templateDefaultPlan.selectedMeals.size)
+        assertEquals(20, templateDefaultPlan.selectedMeals.sumOf { it.servings })
+        assertEquals(2, requestOverridePlan.selectedMeals.size)
+        assertEquals(20, requestOverridePlan.selectedMeals.sumOf { it.servings })
+    }
+
+    @Test
+    fun `meal-like plan strictly allocates requested capability share`() {
+        val template = broadMealTemplate()
+        val meals = listOf(
+            meal("plain", setOf("savory"), "plain-food", 1.0),
+            meal("vegetarian", setOf("savory", "vegetarian"), "vegetarian-food", 0.2),
+        )
+
+        val plan = engine.resolve(
+            template,
+            meals,
+            productsFor(meals),
+            ResolvePlanRequest(
+                templateId = template.templateId,
+                guestCount = 100,
+                budget = 1_000.0,
+                servingsPerGuest = 1,
+                mealCount = 2,
+                capabilityShares = mapOf("vegetarian" to 0.30),
+            ),
+        )
+
+        assertEquals(100, plan.selectedMeals.sumOf { it.servings })
+        assertTrue(capabilityServings(plan.selectedMeals, meals, "vegetarian") >= 30)
+    }
+
+    @Test
+    fun `snack plan allocates overlapping capability shares against total servings`() {
+        val template = broadMealTemplate()
+        val meals = listOf(
+            meal("plain", setOf("savory"), "plain-food", 1.0),
+            meal("vegetarian", setOf("savory", "vegetarian"), "vegetarian-food", 0.8),
+            meal("overlap", setOf("savory", "vegetarian", "halal"), "overlap-food", 0.4),
+        )
+
+        val plan = engine.resolve(
+            template,
+            meals,
+            productsFor(meals),
+            ResolvePlanRequest(
+                templateId = template.templateId,
+                guestCount = 100,
+                budget = 10_000.0,
+                servingsPerGuest = 4,
+                mealCount = 3,
+                capabilityShares = mapOf("vegetarian" to 0.30, "halal" to 0.20),
+            ),
+        )
+
+        assertEquals(400, plan.selectedMeals.sumOf { it.servings })
+        assertTrue(plan.selectedMeals.single { it.mealId == "overlap" }.servings > 0)
+        assertTrue(capabilityServings(plan.selectedMeals, meals, "vegetarian") >= 120)
+        assertTrue(capabilityServings(plan.selectedMeals, meals, "halal") >= 80)
+    }
+
+    @Test
+    fun `impossible capability share fails meal-like plan and warns for snack plan`() {
+        val template = broadMealTemplate()
+        val meals = listOf(meal("plain", setOf("savory"), "plain-food", 1.0))
+        val products = productsFor(meals)
+
+        val exception = assertThrows<PlanResolutionException> {
+            engine.resolve(
+                template,
+                meals,
+                products,
+                ResolvePlanRequest(
+                    templateId = template.templateId,
+                    guestCount = 100,
+                    budget = 1_000.0,
+                    servingsPerGuest = 1,
+                    mealCount = 1,
+                    capabilityShares = mapOf("vegetarian" to 0.30),
+                ),
+            )
+        }
+        val snackPlan = engine.resolve(
+            template,
+            meals,
+            products,
+            ResolvePlanRequest(
+                templateId = template.templateId,
+                guestCount = 100,
+                budget = 1_000.0,
+                servingsPerGuest = 4,
+                mealCount = 1,
+                capabilityShares = mapOf("vegetarian" to 0.30),
+            ),
+        )
+
+        assertTrue(exception.message!!.contains("vegetarian"))
+        assertTrue(exception.message!!.contains("meal-like"))
+        assertEquals(400, snackPlan.selectedMeals.sumOf { it.servings })
+        assertTrue(snackPlan.warnings.any { it.contains("vegetarian") && it.contains("120 of 400") })
+    }
+
+    @Test
+    fun `rejects invalid meal count and capability shares`() {
+        val template = broadMealTemplate()
+
+        val mealCountException = assertThrows<IllegalArgumentException> {
+            engine.resolve(
+                template,
+                emptyList(),
+                emptyList(),
+                ResolvePlanRequest(template.templateId, 10, 100.0, mealCount = 0),
+            )
+        }
+        val capabilityShareException = assertThrows<IllegalArgumentException> {
+            engine.resolve(
+                template,
+                emptyList(),
+                emptyList(),
+                ResolvePlanRequest(
+                    templateId = template.templateId,
+                    guestCount = 10,
+                    budget = 100.0,
+                    capabilityShares = mapOf("vegetarian" to 1.01),
+                ),
+            )
+        }
+
+        assertTrue(mealCountException.message!!.contains("greater than zero"))
+        assertTrue(capabilityShareException.message!!.contains("between 0.0 and 1.0"))
+    }
+
+    private fun broadMealTemplate(defaultMealCount: Double? = null) = EventTemplate(
+        templateId = "broad-meal",
+        name = "Broad meal",
+        description = "Test",
+        defaults = defaultMealCount?.let { mapOf("mealCount" to it) } ?: emptyMap(),
+        requirements = listOf(requirement("savory", "meal", setOf("savory"), 1.0, "servings-per-guest")),
+        weights = mapOf("price" to 1.0),
+    )
+
+    private fun productsFor(meals: List<Meal>): List<Product> = meals.map { meal ->
+        val concept = meal.ingredients.single().concept
+        product("product-${meal.mealId}", concept, 100.0, "piece", 10.0)
+    }
+
+    private fun capabilityServings(
+        selectedMeals: List<ch.inabox.catering.model.SelectedMeal>,
+        catalog: List<Meal>,
+        capability: String,
+    ): Int {
+        val capabilitiesById = catalog.associate { it.mealId to it.capabilities }
+        return selectedMeals.filter { capability in capabilitiesById.getValue(it.mealId) }.sumOf { it.servings }
+    }
+
     private fun requirement(
         id: String,
         type: String,
