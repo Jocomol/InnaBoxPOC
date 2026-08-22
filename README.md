@@ -8,7 +8,7 @@ A deterministic Kotlin/Spring Boot catering resolver backed by MongoDB, with a s
 docker compose up --build
 ```
 
-Open [http://localhost:3000](http://localhost:3000). The backend API is also available at [http://localhost:8080/api/templates](http://localhost:8080/api/templates).
+Open [http://localhost:3000](http://localhost:3000). The backend API is also available at [http://localhost:8080/api/templates](http://localhost:8080/api/templates), with interactive documentation at [http://localhost:8080/swagger-ui.html](http://localhost:8080/swagger-ui.html).
 
 The first MongoDB initialization automatically seeds 6 templates, 19 meals, 17 mock products, and 5 planning-priority definitions. The seed is idempotent. To apply it again without deleting the volume:
 
@@ -36,6 +36,14 @@ Every seeded template can be resolved entirely from the mock catalog. The additi
 The frontend includes a searchable catalog browser for inspecting recipes and purchasable items directly from the API. Results can be filtered by capability, and expose ingredient, package, origin, price, and planning-score data.
 
 ## API
+
+The backend generates an OpenAPI 3.1 description from its controllers and Kotlin models. The documentation includes field constraints, seeded examples, resolver behavior, response schemas, and error responses.
+
+- Interactive Swagger UI: [http://localhost:8080/swagger-ui.html](http://localhost:8080/swagger-ui.html)
+- OpenAPI JSON: [http://localhost:8080/v3/api-docs](http://localhost:8080/v3/api-docs)
+- OpenAPI YAML: [http://localhost:8080/v3/api-docs.yaml](http://localhost:8080/v3/api-docs.yaml)
+
+Swagger UI's **Try it out** requests go directly to the backend and require the seeded MongoDB catalog to be running.
 
 ```text
 GET  /api/templates
@@ -68,7 +76,7 @@ curl -X POST http://localhost:8080/api/plans/resolve \
 
 Weight overrides are merged with database defaults and template-specific defaults, then normalized. Priority labels, descriptions, display order, scale labels, and fallback weights come from the `planningPriorities` MongoDB collection, so neither the API nor planner UI contains a fixed list of priorities. Unknown request weights are rejected, and the seed check rejects any template weight or catalog score without matching priority metadata.
 
-`requiredCapabilities` and exclusions are hard filters applied before scoring. Quantities support compatible mass, volume, and count units; product conversions handle serving units such as cups of coffee to grams of beans.
+Required capabilities filter meal candidates before scoring; excluded capabilities filter both meal and product candidates. Excluded concepts are enforced during guaranteed-meal validation and product resolution. Quantities support compatible mass, volume, and count units; product conversions handle serving units such as cups of coffee to grams of beans.
 
 ### Score semantics
 
