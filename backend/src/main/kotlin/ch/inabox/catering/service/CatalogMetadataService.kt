@@ -2,6 +2,7 @@ package ch.inabox.catering.service
 
 import ch.inabox.catering.model.DietaryConstraintDefinition
 import ch.inabox.catering.model.MealCategory
+import ch.inabox.catering.model.PlanningPriority
 import ch.inabox.catering.repository.DietaryConstraintRepository
 import ch.inabox.catering.repository.MealCategoryRepository
 import ch.inabox.catering.repository.MealRepository
@@ -96,4 +97,64 @@ class CatalogMetadataService(
 
     private val constraintOrder = compareBy<DietaryConstraintDefinition>({ it.displayOrder }, { it.constraintId })
     private val categoryOrder = compareBy<MealCategory>({ it.displayOrder }, { it.categoryId })
+}
+
+internal fun fallbackPlanningPriorities(): List<PlanningPriority> = listOf(
+    PlanningPriority(
+        priorityId = "price",
+        label = "Affordability",
+        description = "Favors candidates that provide the required quantity at a lower comparable cost.",
+        displayOrder = 10,
+        defaultWeight = 0.20,
+        scale = "continuous",
+        lowLabel = "Premium",
+        highLabel = "Economical",
+    ),
+    PlanningPriority(
+        priorityId = "swiss",
+        label = "Swiss origin",
+        description = "Favors Swiss-sourced products and meals whose complete ingredient list is Swiss-sourced.",
+        displayOrder = 20,
+        defaultWeight = 0.20,
+        scale = "binary",
+        lowLabel = "Non-Swiss",
+        highLabel = "Swiss",
+    ),
+    PlanningPriority(
+        priorityId = "presentation",
+        label = "Presentation",
+        description = "Favors dishes that are visually suited to serving at the selected event.",
+        displayOrder = 30,
+        defaultWeight = 0.20,
+        scale = "continuous",
+        lowLabel = "Practical",
+        highLabel = "Showpiece",
+    ),
+    PlanningPriority(
+        priorityId = "prepEase",
+        label = "Preparation ease",
+        description = "Favors food that needs less hands-on preparation and service-time work.",
+        displayOrder = 40,
+        defaultWeight = 0.20,
+        scale = "continuous",
+        lowLabel = "Hands-on",
+        highLabel = "Low effort",
+    ),
+    PlanningPriority(
+        priorityId = "sustainability",
+        label = "Sustainability",
+        description = "Favors the catalog's relative estimate for lower-impact ingredients, packaging, and sourcing.",
+        displayOrder = 50,
+        defaultWeight = 0.20,
+        scale = "continuous",
+        lowLabel = "Lower priority",
+        highLabel = "Lower impact",
+    ),
+)
+
+
+internal fun effectivePlanningPriorities(configured: List<PlanningPriority>): List<PlanningPriority> {
+    val merged = fallbackPlanningPriorities().associateByTo(linkedMapOf()) { it.priorityId }
+    configured.forEach { priority -> merged[priority.priorityId] = priority }
+    return merged.values.sortedWith(compareBy(PlanningPriority::displayOrder, PlanningPriority::priorityId))
 }

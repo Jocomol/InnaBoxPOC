@@ -590,3 +590,66 @@ footer { display: flex; justify-content: space-between; max-width: 1240px; margi
   .picker-footer > * { flex: 1; }
 }
 .heading-actions .secondary-button { margin-left: 0; }
+
+/* Stock concept picker */
+.inventory-concept-button {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 12px;
+  color: var(--ink);
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  text-align: left;
+}
+.inventory-concept-button:hover,
+.inventory-concept-button:focus-visible {
+  border-color: var(--green);
+  box-shadow: 0 0 0 3px rgba(36, 91, 69, .1);
+  outline: none;
+}
+.inventory-concept-button > span { min-width: 0; }
+.inventory-concept-button strong,
+.inventory-concept-button small { display: block; }
+.inventory-concept-button strong { font-size: 13px; font-weight: 700; }
+.inventory-concept-button small {
+  margin-top: 3px;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.inventory-concept-button b {
+  flex: 0 0 auto;
+  color: var(--green);
+  font-size: 11px;
+}
+.inventory-concept-button.selected { background: var(--sage); border-color: rgba(36,91,69,.28); }
+
+.inventory-picker-results { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.inventory-option-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 15px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.inventory-option-card.selected { background: var(--sage); border-color: rgba(36,91,69,.35); }
+.inventory-option-card h3 { margin: 0 0 5px; font-size: 14px; }
+.inventory-option-card p { margin: 0; color: var(--muted); font-size: 10px; line-height: 1.4; }
+.inventory-picker .picker-shell { min-height: min(620px, calc(100dvh - 32px)); }
+
+@media (max-width: 640px) {
+  .inventory-picker-results { grid-template-columns: 1fr; }
+  .inventory-option-card { grid-template-columns: 1fr; }
+  .inventory-option-card .picker-add { width: 100%; }
+  .inventory-concept-button { min-height: 58px; }
+}

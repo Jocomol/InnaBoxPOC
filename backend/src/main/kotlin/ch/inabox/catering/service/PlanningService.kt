@@ -22,7 +22,7 @@ class PlanningService(
         val template = eventTemplateRepository.findByTemplateId(request.templateId)
             ?: throw TemplateNotFoundException(request.templateId)
 
-        val priorities = planningPriorityRepository.findAll()
+        val priorities = effectivePlanningPriorities(planningPriorityRepository.findAll())
         val priorityIds = priorities.map { it.priorityId }.toSet()
         val unknownPriorityIds = (template.weights.keys + request.weights.keys) - priorityIds
         if (unknownPriorityIds.isNotEmpty()) {

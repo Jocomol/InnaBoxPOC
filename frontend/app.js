@@ -9,6 +9,9 @@ const state = {
   pickerCategory: '',
   pickerCapability: '',
   pickerSearchToken: 0,
+  inventoryPickerOptions: [],
+  inventoryPickerRow: null,
+  inventoryPickerSearchToken: 0,
   catalogType: 'meals',
   catalogLoaded: false,
   meals: [],
@@ -33,17 +36,26 @@ const clearConstraintsButton = document.querySelector('#clear-constraints');
 const clearRequiredMealsButton = document.querySelector('#clear-required-meals');
 const pickerClearSelectedButton = document.querySelector('#meal-picker-clear-selected');
 const pickerStatus = document.querySelector('#meal-picker-status');
+const inventoryPicker = document.querySelector('#inventory-picker');
+const inventoryPickerSearch = document.querySelector('#inventory-picker-search');
+const inventoryPickerResults = document.querySelector('#inventory-picker-results');
+const inventoryPickerStatus = document.querySelector('#inventory-picker-status');
 const developerTools = document.querySelector('#developer-tools');
 const catalogSearch = document.querySelector('#catalog-search');
 const catalogCapability = document.querySelector('#catalog-capability');
 const catalogResults = document.querySelector('#catalog-results');
 
 let pickerDebounce;
+let inventoryPickerDebounce;
 
-document.querySelector('#add-inventory').addEventListener('click', () => addInventoryRow());
+document.querySelector('#add-inventory').addEventListener('click', () => {
+  const row = addInventoryRow();
+  openInventoryPicker(row);
+});
 document.querySelector('#open-meal-picker').addEventListener('click', openMealPicker);
 document.querySelector('#close-meal-picker').addEventListener('click', closeMealPicker);
 document.querySelector('#meal-picker-done').addEventListener('click', closeMealPicker);
+document.querySelector('#close-inventory-picker').addEventListener('click', closeInventoryPicker);
 clearConstraintsButton.addEventListener('click', clearConstraints);
 clearRequiredMealsButton.addEventListener('click', clearRequiredMeals);
 pickerClearSelectedButton.addEventListener('click', clearRequiredMeals);
@@ -63,6 +75,17 @@ pickerSearch.addEventListener('input', () => {
 mealPicker.addEventListener('close', () => document.body.classList.remove('dialog-open'));
 mealPicker.addEventListener('click', event => {
   if (event.target === mealPicker) closeMealPicker();
+});
+inventoryPickerSearch.addEventListener('input', () => {
+  clearTimeout(inventoryPickerDebounce);
+  inventoryPickerDebounce = setTimeout(searchInventoryConcepts, 180);
+});
+inventoryPicker.addEventListener('close', () => {
+  state.inventoryPickerRow = null;
+  document.body.classList.remove('dialog-open');
+});
+inventoryPicker.addEventListener('click', event => {
+  if (event.target === inventoryPicker) closeInventoryPicker();
 });
 
 developerTools.addEventListener('toggle', () => {
@@ -413,15 +436,103 @@ function renderInventoryEmptyState() {
   }
 }
 
+function openInventoryPicker(row) {
+  state.inventoryPickerRow = row;
+  inventoryPickerSearch.value = '';
+  if (typeof inventoryPicker.showModal === 'function') inventoryPicker.showModal();
+  else inventoryPicker.setAttribute('open', '');
+  document.body.classList.add('dialog-open');
+  inventoryPickerSearch.focus();
+  searchInventoryConcepts();
+}
+
+function closeInventoryPicker() {
+  if (typeof inventoryPicker.close === 'function' && inventoryPicker.open) inventoryPicker.close();
+  else inventoryPicker.removeAttribute('open');
+  state.inventoryPickerRow = null;
+  document.body.classList.remove('dialog-open');
+}
+
+async function searchInventoryConcepts() {
+  const token = ++state.inventoryPickerSearchToken;
+  const params = new URLSearchParams({ limit: '50' });
+  const query = inventoryPickerSearch.value.trim();
+  if (query) params.set('query', query);
+  inventoryPickerStatus.textContent = 'Searching ingredients…';
+
+  try {
+    const options = await fetchJson(`/api/inventory-concepts/search?${params.toString()}`);
+    if (token !== state.inventoryPickerSearchToken) return;
+    state.inventoryPickerOptions = options;
+    inventoryPickerStatus.textContent = `${options.length} ingredient${options.length === 1 ? '' : 's'}${query ? ` matching “${query}”` : ''}`;
+    renderInventoryPickerResults();
+  } catch (error) {
+    if (token !== state.inventoryPickerSearchToken) return;
+    inventoryPickerStatus.textContent = 'Ingredient search failed.';
+    inventoryPickerResults.innerHTML = `<div class="picker-empty">${escapeHtml(error.message)}</div>`;
+  }
+}
+
+function renderInventoryPickerResults() {
+  if (!state.inventoryPickerOptions.length) {
+    inventoryPickerResults.innerHTML = '<div class="picker-empty">No ingredients match this search.</div>';
+    return;
+  }
+
+  const selectedConcept = state.inventoryPickerRow?.querySelector('.inventory-concept')?.value || '';
+  inventoryPickerResults.innerHTML = state.inventoryPickerOptions.map(option => {
+    const selected = option.concept === selectedConcept;
+    return `
+      <article class="inventory-option-card ${selected ? 'selected' : ''}">
+        <div>
+          <h3>${escapeHtml(option.label)}</h3>
+          <p>${escapeHtml(option.concept)} · suggested unit ${escapeHtml(option.suggestedUnit)}</p>
+        </div>
+        <button class="picker-add ${selected ? 'added' : ''}" type="button" data-inventory-concept="${escapeHtml(option.concept)}">
+          ${selected ? 'Selected' : 'Use ingredient'}
+        </button>
+      </article>
+    `;
+  }).join('');
+
+  inventoryPickerResults.querySelectorAll('[data-inventory-concept]').forEach(button => {
+    button.addEventListener('click', () => {
+      const option = state.inventoryPickerOptions.find(item => item.concept === button.dataset.inventoryConcept);
+      if (!option || !state.inventoryPickerRow) return;
+      setInventoryConcept(state.inventoryPickerRow, option);
+      closeInventoryPicker();
+    });
+  });
+}
+
+function setInventoryConcept(row, option) {
+  row.querySelector('.inventory-concept').value = option.concept;
+  row.querySelector('.inventory-concept-label').textContent = option.label;
+  row.querySelector('.inventory-concept-id').textContent = option.concept;
+  row.querySelector('.inventory-concept-button').classList.add('selected');
+  const unitSelect = row.querySelector('.inventory-unit');
+  if ([...unitSelect.options].some(unit => unit.value === option.suggestedUnit)) {
+    unitSelect.value = option.suggestedUnit;
+  }
+}
+
 function addInventoryRow(item = { concept: '', amount: '', unit: 'piece' }) {
   inventoryRows.querySelector('.empty-row')?.remove();
   const row = document.createElement('div');
   row.className = 'inventory-row';
+  const hasConcept = Boolean(item.concept);
   row.innerHTML = `
-    <label class="inventory-cell inventory-concept-cell">
-      <span>Product concept</span>
-      <input class="inventory-concept" aria-label="Inventory concept" placeholder="e.g. water" value="${escapeHtml(item.concept)}">
-    </label>
+    <div class="inventory-cell inventory-concept-cell">
+      <span>Ingredient</span>
+      <input class="inventory-concept" type="hidden" value="${escapeHtml(item.concept)}">
+      <button class="inventory-concept-button ${hasConcept ? 'selected' : ''}" type="button" aria-label="Choose stock ingredient">
+        <span>
+          <strong class="inventory-concept-label">${hasConcept ? escapeHtml(humanize(item.concept)) : 'Choose ingredient'}</strong>
+          <small class="inventory-concept-id">${hasConcept ? escapeHtml(item.concept) : 'Search the catalog'}</small>
+        </span>
+        <b>${hasConcept ? 'Change' : 'Choose'}</b>
+      </button>
+    </div>
     <label class="inventory-cell">
       <span>Amount</span>
       <input class="inventory-amount" aria-label="Inventory amount" type="number" min="0" step="0.1" inputmode="decimal" placeholder="0" value="${escapeHtml(item.amount)}">
@@ -436,11 +547,13 @@ function addInventoryRow(item = { concept: '', amount: '', unit: 'piece' }) {
     </label>
     <button class="remove-inventory" type="button" aria-label="Remove inventory item"><span aria-hidden="true">×</span> Remove</button>
   `;
+  row.querySelector('.inventory-concept-button').addEventListener('click', () => openInventoryPicker(row));
   row.querySelector('.remove-inventory').addEventListener('click', () => {
     row.remove();
     renderInventoryEmptyState();
   });
   inventoryRows.append(row);
+  return row;
 }
 
 async function resolvePlan(event) {

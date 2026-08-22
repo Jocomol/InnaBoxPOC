@@ -11,7 +11,9 @@ import ch.inabox.catering.repository.MealRepository
 import ch.inabox.catering.repository.PlanningPriorityRepository
 import ch.inabox.catering.repository.ProductRepository
 import ch.inabox.catering.service.CatalogMetadataService
+import ch.inabox.catering.service.InventoryCatalogService
 import ch.inabox.catering.service.MealCatalogService
+import ch.inabox.catering.service.effectivePlanningPriorities
 import ch.inabox.catering.service.TemplateNotFoundException
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
@@ -27,6 +29,7 @@ class CatalogController(
     private val productRepository: ProductRepository,
     private val planningPriorityRepository: PlanningPriorityRepository,
     private val mealCatalogService: MealCatalogService,
+    private val inventoryCatalogService: InventoryCatalogService,
     private val catalogMetadataService: CatalogMetadataService,
 ) {
     @GetMapping("/templates")
@@ -59,7 +62,13 @@ class CatalogController(
     @GetMapping("/products")
     fun products(): List<Product> = productRepository.findAll().sortedBy { it.productId }
 
+    @GetMapping("/inventory-concepts/search")
+    fun inventoryConcepts(
+        @RequestParam(required = false) query: String?,
+        @RequestParam(defaultValue = "40") limit: Int,
+    ) = inventoryCatalogService.search(query, limit)
+
     @GetMapping("/priorities")
     fun priorities(): List<PlanningPriority> =
-        planningPriorityRepository.findAll().sortedWith(compareBy(PlanningPriority::displayOrder, PlanningPriority::priorityId))
+        effectivePlanningPriorities(planningPriorityRepository.findAll())
 }
