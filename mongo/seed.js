@@ -92,6 +92,7 @@ const dietaryConstraints = [
   {
     id: "vegetarian",
     label: "Vegetarian",
+    icon: "🥬",
     description:
         "Allocate enough vegetarian-compatible servings for the entered guest count.",
     displayOrder: 10,
@@ -103,6 +104,7 @@ const dietaryConstraints = [
   {
     id: "vegan",
     label: "Vegan",
+    icon: "🌱",
     description:
         "Allocate enough vegan-compatible servings for the entered guest count.",
     displayOrder: 20,
@@ -114,6 +116,7 @@ const dietaryConstraints = [
   {
     id: "halal",
     label: "Halal",
+    icon: "H",
     description:
         "Allocate enough halal-compatible servings for the entered guest count.",
     displayOrder: 30,
@@ -125,6 +128,7 @@ const dietaryConstraints = [
   {
     id: "gluten-free",
     label: "Gluten-free",
+    icon: "GF",
     description:
         "Allocate enough gluten-free-compatible servings for the entered guest count.",
     displayOrder: 40,
@@ -136,6 +140,7 @@ const dietaryConstraints = [
   {
     id: "lactose-free",
     label: "Lactose-free",
+    icon: "LF",
     description:
         "Allocate enough lactose-free-compatible servings for the entered guest count.",
     displayOrder: 50,
@@ -147,6 +152,7 @@ const dietaryConstraints = [
   {
     id: "nut-free",
     label: "Nut-free",
+    icon: "NF",
     description:
         "Allocate enough nut-free-compatible servings for the entered guest count.",
     displayOrder: 60,
@@ -161,42 +167,49 @@ const mealCategories = [
   {
     id: "fruit",
     label: "Fruit",
+    icon: "🍓",
     description: "Fruit cups, salads, skewers, and fruit-forward dishes.",
     displayOrder: 10
   },
   {
     id: "bakery",
     label: "Bakery & Pastries",
+    icon: "🥐",
     description: "Croissants, quiches, baked bites, and pastry-based dishes.",
     displayOrder: 20
   },
   {
     id: "meat",
     label: "Meat",
+    icon: "🍗",
     description: "Dishes that contain meat or meat-based components.",
     displayOrder: 30
   },
   {
     id: "plant-based",
     label: "Vegetarian & Plant-based",
+    icon: "🌿",
     description: "Vegetarian and vegan dishes.",
     displayOrder: 40
   },
   {
     id: "breakfast",
     label: "Breakfast & Brunch",
+    icon: "🍳",
     description: "Breakfast, brunch, and coffee-break dishes.",
     displayOrder: 50
   },
   {
     id: "lunch",
     label: "Lunch & Buffet",
+    icon: "🍽️",
     description: "Hearty lunch and buffet dishes.",
     displayOrder: 60
   },
   {
     id: "reception",
     label: "Apéro & Reception",
+    icon: "🥂",
     description: "Finger food and reception-friendly bites.",
     displayOrder: 70
   }
@@ -206,6 +219,7 @@ const eventTemplates = [
   {
     id: "business-apero",
     name: "Business Apéro",
+    icon: "🥂",
     description: "Finger food and drinks for a casual business event.",
     defaults: {
       durationMinutes: 120,
@@ -255,6 +269,7 @@ const eventTemplates = [
   {
     id: "brunch",
     name: "Brunch",
+    icon: "🥞",
     description: "Breakfast and lunch-style food for a relaxed brunch.",
     defaults: {
       durationMinutes: 180,
@@ -314,6 +329,7 @@ const eventTemplates = [
   {
     id: "coffee-break",
     name: "Coffee Break",
+    icon: "☕",
     description:
         "A compact sweet-and-savory break for meetings, workshops, and training days.",
     defaults: {
@@ -374,6 +390,7 @@ const eventTemplates = [
   {
     id: "team-lunch-buffet",
     name: "Team Lunch Buffet",
+    icon: "🍽️",
     description:
         "A generous buffet with a hearty centerpiece and a substantial vegetarian option.",
     defaults: {
@@ -434,6 +451,7 @@ const eventTemplates = [
   {
     id: "vegan-reception",
     name: "Vegan Reception",
+    icon: "🌿",
     description:
         "Colorful plant-based finger food for an elegant standing reception.",
     defaults: {
@@ -494,6 +512,7 @@ const eventTemplates = [
   {
     id: "swiss-breakfast",
     name: "Swiss Breakfast",
+    icon: "🥐",
     description:
         "A warm and cold Swiss-inspired breakfast with coffee and apple juice.",
     defaults: {

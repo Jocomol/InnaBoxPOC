@@ -35,6 +35,7 @@ class CatalogMetadataService(
                     DietaryConstraintDefinition(
                         constraintId = "vegetarian",
                         label = "Vegetarian",
+                        icon = "🥬",
                         description = "Allocate enough vegetarian-compatible servings for the entered guest count.",
                         displayOrder = 10,
                         dietaryCapability = "vegetarian",
@@ -47,6 +48,7 @@ class CatalogMetadataService(
                     DietaryConstraintDefinition(
                         constraintId = "vegan",
                         label = "Vegan",
+                        icon = "🌱",
                         description = "Allocate enough vegan-compatible servings for the entered guest count.",
                         displayOrder = 20,
                         dietaryCapability = "vegan",
@@ -59,6 +61,7 @@ class CatalogMetadataService(
                     DietaryConstraintDefinition(
                         constraintId = "halal",
                         label = "Halal",
+                        icon = "H",
                         description = "Allocate enough halal-compatible servings for the entered guest count.",
                         displayOrder = 30,
                         dietaryCapability = "halal",
@@ -84,6 +87,7 @@ class CatalogMetadataService(
                 MealCategory(
                     categoryId = id,
                     label = humanize(id),
+                    icon = fallbackCategoryIcon(id),
                     description = "Catalog category",
                     displayOrder = (index + 1) * 10,
                 )
@@ -93,14 +97,25 @@ class CatalogMetadataService(
         // Legacy-volume browse categories. MealCatalogService knows how to map
         // these to the old capability/ingredient data until categoryIds are seeded.
         return listOf(
-            MealCategory(categoryId = "fruit", label = "Fruit", description = "Fruit cups, salads, skewers, and fruit-forward dishes.", displayOrder = 10),
-            MealCategory(categoryId = "bakery", label = "Bakery & Pastries", description = "Croissants, quiches, baked bites, and pastry-based dishes.", displayOrder = 20),
-            MealCategory(categoryId = "meat", label = "Meat", description = "Dishes that contain meat or meat-based components.", displayOrder = 30),
-            MealCategory(categoryId = "plant-based", label = "Vegetarian & Plant-based", description = "Vegetarian and vegan dishes.", displayOrder = 40),
-            MealCategory(categoryId = "breakfast", label = "Breakfast & Brunch", description = "Breakfast, brunch, and coffee-break dishes.", displayOrder = 50),
-            MealCategory(categoryId = "lunch", label = "Lunch & Buffet", description = "Hearty lunch and buffet dishes.", displayOrder = 60),
-            MealCategory(categoryId = "reception", label = "Apéro & Reception", description = "Finger food and reception-friendly bites.", displayOrder = 70),
+            MealCategory(categoryId = "fruit", label = "Fruit", icon = "🍓", description = "Fruit cups, salads, skewers, and fruit-forward dishes.", displayOrder = 10),
+            MealCategory(categoryId = "bakery", label = "Bakery & Pastries", icon = "🥐", description = "Croissants, quiches, baked bites, and pastry-based dishes.", displayOrder = 20),
+            MealCategory(categoryId = "meat", label = "Meat", icon = "🍗", description = "Dishes that contain meat or meat-based components.", displayOrder = 30),
+            MealCategory(categoryId = "plant-based", label = "Vegetarian & Plant-based", icon = "🌿", description = "Vegetarian and vegan dishes.", displayOrder = 40),
+            MealCategory(categoryId = "breakfast", label = "Breakfast & Brunch", icon = "🍳", description = "Breakfast, brunch, and coffee-break dishes.", displayOrder = 50),
+            MealCategory(categoryId = "lunch", label = "Lunch & Buffet", icon = "🍽️", description = "Hearty lunch and buffet dishes.", displayOrder = 60),
+            MealCategory(categoryId = "reception", label = "Apéro & Reception", icon = "🥂", description = "Finger food and reception-friendly bites.", displayOrder = 70),
         )
+    }
+
+    private fun fallbackCategoryIcon(id: String): String? = when (id.trim().lowercase()) {
+        "fruit" -> "🍓"
+        "bakery" -> "🥐"
+        "meat" -> "🍗"
+        "plant-based" -> "🌿"
+        "breakfast" -> "🍳"
+        "lunch" -> "🍽️"
+        "reception" -> "🥂"
+        else -> null
     }
 
     private fun humanize(value: String): String = value

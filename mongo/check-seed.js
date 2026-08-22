@@ -54,6 +54,22 @@ if (templateCount !== 6 || mealCount !== 33 || productCount !== 36 || priorityCo
   failSeed("Unexpected seed size; expected exactly 6 templates, 33 meals, 36 products, 5 planning priorities, 6 dietary constraints, and 7 meal categories.");
 }
 
+const missingVisualMetadata = [];
+[
+  ["eventTemplates", db.eventTemplates],
+  ["dietaryConstraints", db.dietaryConstraints],
+  ["mealCategories", db.mealCategories]
+].forEach(([collectionName, collection]) => {
+  collection.find().forEach(document => {
+    if (typeof document.icon !== "string" || document.icon.trim().length === 0) {
+      missingVisualMetadata.push(`${collectionName}/${document.id || "<missing-id>"}/icon`);
+    }
+  });
+});
+if (missingVisualMetadata.length > 0) {
+  failSeed(`Missing visual icon metadata: ${missingVisualMetadata.join(", ")}`);
+}
+
 const definedPriorityIds = new Set(db.planningPriorities.find({}, { id: 1 }).toArray().map(priority => priority.id));
 const undefinedPriorityReferences = [];
 

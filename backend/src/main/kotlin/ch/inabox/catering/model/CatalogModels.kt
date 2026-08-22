@@ -89,6 +89,8 @@ data class DietaryConstraintDefinition(
         example = "gluten-free",
     )
     val dietaryCapability: String? = null,
+    @field:Schema(description = "Optional short visual marker rendered by clients, for example an emoji or compact text badge.", example = "GF")
+    val icon: String? = null,
 )
 
 @Document("mealCategories")
@@ -105,6 +107,8 @@ data class MealCategory(
     val description: String = "",
     @field:Schema(description = "Ascending UI display order.", example = "60")
     val displayOrder: Int = 0,
+    @field:Schema(description = "Optional short visual marker rendered by clients, for example an emoji or compact text badge.", example = "🍽️")
+    val icon: String? = null,
 )
 
 @Document("eventTemplates")
@@ -130,6 +134,8 @@ data class EventTemplate(
         example = "{\"price\":0.3,\"swiss\":0.2,\"presentation\":0.2,\"prepEase\":0.15,\"sustainability\":0.15}",
     )
     val weights: Map<String, Double> = emptyMap(),
+    @field:Schema(description = "Optional short visual marker rendered by clients, for example an emoji.", example = "🥂")
+    val icon: String? = null,
 )
 
 @Schema(description = "How many physical pieces make one serving of a meal.")

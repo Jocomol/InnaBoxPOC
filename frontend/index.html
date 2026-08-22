@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="description" content="Deterministic catering and shopping plan generator">
   <title>Tableplan — Catering planner</title>
-  <link rel="stylesheet" href="styles.css?v=pin-reject-actions-3">
-  <script src="app.js?v=pin-reject-actions-3" defer></script>
+  <link rel="stylesheet" href="styles.css?v=visual-dietary-1">
+  <script src="app.js?v=visual-dietary-1" defer></script>
 </head>
 <body>
   <header class="site-header">
@@ -34,13 +34,12 @@
           </div>
         </div>
 
-        <div class="field-grid event-grid">
-          <label class="field wide">
-            <span>Event format</span>
-            <select id="template" required disabled>
-              <option>Loading…</option>
-            </select>
-          </label>
+        <input id="template" type="hidden" value="">
+        <div id="event-types" class="event-type-grid" role="radiogroup" aria-label="Event format" aria-live="polite">
+          <p class="empty-row">Loading event formats…</p>
+        </div>
+
+        <div class="event-input-grid">
           <label class="field">
             <span>Guests</span>
             <input id="guest-count" type="number" min="1" max="10000" value="40" inputmode="numeric" required>

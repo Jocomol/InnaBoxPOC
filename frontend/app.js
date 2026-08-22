@@ -24,6 +24,7 @@ const state = {
 
 const form = document.querySelector('#planner-form');
 const templateSelect = document.querySelector('#template');
+const eventTypesRoot = document.querySelector('#event-types');
 const description = document.querySelector('#template-description');
 const inventoryRows = document.querySelector('#inventory-rows');
 const errorBox = document.querySelector('#form-error');
@@ -76,11 +77,10 @@ pickerCapability.addEventListener('change', () => {
 document.querySelector('#back-to-form').addEventListener('click', () => {
   form.scrollIntoView({ behavior: 'smooth', block: 'start' });
 });
-templateSelect.addEventListener('change', () => {
-  clearExcludedMeals();
-  applyTemplate();
+guestCountInput.addEventListener('input', () => {
+  syncDietaryGuestLimits();
+  refreshDietaryConflictUI();
 });
-guestCountInput.addEventListener('input', syncDietaryGuestLimits);
 form.addEventListener('submit', resolvePlan);
 regenerateMenuButton.addEventListener('click', () => form.requestSubmit());
 pickerSearch.addEventListener('input', () => {
@@ -134,13 +134,10 @@ async function loadPlannerData() {
       fetchJson('/api/meal-capabilities')
     ]);
 
-    templateSelect.innerHTML = state.templates
-      .map(template => `<option value="${escapeHtml(template.id)}">${escapeHtml(template.name)}</option>`)
-      .join('');
-    templateSelect.disabled = false;
-    const preferred = state.templates.find(template => template.id === 'business-apero');
-    if (preferred) templateSelect.value = preferred.id;
+    const preferred = state.templates.find(template => template.id === 'business-apero') || state.templates[0];
+    templateSelect.value = preferred?.id || '';
 
+    renderEventTypes();
     renderDietaryConstraints();
     renderMealCategories();
     renderMealCapabilities();
@@ -150,6 +147,39 @@ async function loadPlannerData() {
   } catch (error) {
     showError(`Could not load planner data. ${error.message}`);
   }
+}
+
+function renderEventTypes() {
+  if (!state.templates.length) {
+    eventTypesRoot.innerHTML = '<p class="empty-row">No event formats are available.</p>';
+    return;
+  }
+
+  eventTypesRoot.innerHTML = state.templates.map(template => {
+    const selected = template.id === templateSelect.value;
+    return `
+      <button class="event-type-card ${selected ? 'selected' : ''}" type="button" role="radio"
+        aria-checked="${selected}" data-template-id="${escapeHtml(template.id)}">
+        ${visualIcon(template.icon || fallbackIcon('event', template.id), 'event-type-icon')}
+        <span class="event-type-copy">
+          <strong>${escapeHtml(template.name)}</strong>
+          <small>${escapeHtml(template.description)}</small>
+        </span>
+        <span class="event-type-check" aria-hidden="true">✓</span>
+      </button>
+    `;
+  }).join('');
+
+  eventTypesRoot.querySelectorAll('[data-template-id]').forEach(button => {
+    button.addEventListener('click', () => {
+      if (templateSelect.value === button.dataset.templateId) return;
+      templateSelect.value = button.dataset.templateId;
+      clearExcludedMeals();
+      renderEventTypes();
+      applyTemplate();
+      if (state.currentPlan) showMenuChange('Event format changed — regenerate to calculate a new menu.', true);
+    });
+  });
 }
 
 function renderDietaryConstraints() {
@@ -162,7 +192,8 @@ function renderDietaryConstraints() {
   constraintRoot.innerHTML = state.constraints.map(constraint => `
     <label class="constraint-option">
       <span class="constraint-card">
-        <span>
+        ${visualIcon(constraint.icon || fallbackIcon('dietary', constraint.id), 'constraint-icon')}
+        <span class="constraint-copy">
           <strong>${escapeHtml(constraint.label)}</strong>
           <small>${escapeHtml(constraint.description)}</small>
         </span>
@@ -182,6 +213,7 @@ function renderDietaryConstraints() {
     input.addEventListener('input', () => {
       input.value = String(clamp(Math.trunc(Number(input.value) || 0), 0, currentGuestCount()));
       updateConstraintActions();
+      refreshDietaryConflictUI();
     });
   });
   syncDietaryGuestLimits();
@@ -192,6 +224,9 @@ function updateConstraintActions() {
   const count = Object.keys(dietaryGuestCounts()).length;
   clearConstraintsButton.hidden = count === 0;
   clearConstraintsButton.textContent = count ? `Clear ${count} count${count === 1 ? '' : 's'}` : 'Clear counts';
+  constraintRoot.querySelectorAll('input[data-dietary-count]').forEach(input => {
+    input.closest('.constraint-card')?.classList.toggle('active', Number(input.value) > 0);
+  });
 }
 
 function clearConstraints() {
@@ -199,6 +234,13 @@ function clearConstraints() {
     input.value = '0';
   });
   updateConstraintActions();
+  refreshDietaryConflictUI();
+}
+
+function refreshDietaryConflictUI() {
+  renderRequiredMeals();
+  if (mealPicker.open) renderPickerResults();
+  renderCurrentMeals();
 }
 
 function currentGuestCount() {
@@ -239,10 +281,11 @@ function renderMealCapabilities() {
 }
 
 function renderMealCategories() {
-  const categories = [{ id: '', label: 'All dishes' }, ...state.mealCategories];
+  const categories = [{ id: '', label: 'All dishes', icon: '✦' }, ...state.mealCategories];
   pickerCategories.innerHTML = categories.map(category => `
     <button class="category-button ${state.pickerCategory === category.id ? 'active' : ''}" type="button" data-category-id="${escapeHtml(category.id)}">
-      ${escapeHtml(category.label)}
+      ${visualIcon(category.icon || fallbackIcon('category', category.id), 'category-icon')}
+      <span>${escapeHtml(category.label)}</span>
     </button>
   `).join('');
   pickerCategories.querySelectorAll('[data-category-id]').forEach(button => {
@@ -306,15 +349,15 @@ function renderPickerResults() {
   pickerResults.innerHTML = state.pickerMeals.map(meal => {
     const conflicts = mealConstraintConflicts(meal);
     const isSelected = state.requiredMeals.has(meal.id);
-    const categories = (meal.categoryIds || []).map(categoryLabel).filter(Boolean);
+    const categories = (meal.categoryIds || []).map(categoryMeta).filter(Boolean);
     return `
       <article class="picker-card ${conflicts.length ? 'conflict' : ''}">
         <div>
           <h3>${escapeHtml(meal.name)}</h3>
           <div class="picker-card-meta">
-            ${categories.slice(0, 3).map(label => `<span class="chip">${escapeHtml(label)}</span>`).join('')}
+            ${categories.slice(0, 3).map(category => `<span class="chip category-chip">${visualIcon(category.icon, 'chip-icon')}<span>${escapeHtml(category.label)}</span></span>`).join('')}
           </div>
-          ${conflicts.length ? `<p class="picker-conflict">⚠ ${escapeHtml(conflictSummary(conflicts))}</p>` : ''}
+          ${conflicts.length ? `<p class="picker-conflict">⚠ Does not cover: ${escapeHtml(conflictSummary(conflicts))}. It can still be pinned; other dishes must provide this dietary coverage.</p>` : ''}
         </div>
         <button class="picker-add ${isSelected ? 'remove' : ''}" type="button" data-picker-meal-id="${escapeHtml(meal.id)}" aria-pressed="${isSelected}">
           ${isSelected ? 'Remove' : '+ Add dish'}
@@ -379,15 +422,15 @@ function renderRequiredMeals() {
 
   requiredMealsRoot.innerHTML = meals.map(meal => {
     const conflicts = mealConstraintConflicts(meal);
-    const categories = (meal.categoryIds || []).map(categoryLabel).filter(Boolean);
+    const categories = (meal.categoryIds || []).map(categoryMeta).filter(Boolean);
     return `
       <div class="selected-meal-row ${conflicts.length ? 'conflict' : ''}">
         <div class="selected-meal-main">
           <strong>${escapeHtml(meal.name)}</strong>
           <div class="selected-meal-meta">
-            ${categories.slice(0, 3).map(label => `<span>${escapeHtml(label)}</span>`).join('<span>·</span>')}
+            ${categories.slice(0, 3).map(category => `<span class="selected-category">${visualIcon(category.icon, 'inline-icon')} ${escapeHtml(category.label)}</span>`).join('<span>·</span>')}
           </div>
-          ${conflicts.length ? `<p class="selected-meal-warning">⚠ Constraint exception: ${escapeHtml(conflictSummary(conflicts))}. This dish will still be included.</p>` : ''}
+          ${conflicts.length ? `<p class="selected-meal-warning">⚠ Dietary coverage note: this pinned dish does not cover ${escapeHtml(conflictSummary(conflicts))}. It will still be included; the rest of the menu must cover those guests.</p>` : ''}
         </div>
         <button class="remove-meal" type="button" data-remove-meal-id="${escapeHtml(meal.id)}" aria-label="Remove ${escapeHtml(meal.name)}"><span aria-hidden="true">×</span> Remove</button>
       </div>
@@ -411,18 +454,28 @@ function renderRequiredMeals() {
 }
 
 function mealConstraintConflicts(meal) {
-  // Dietary guest counts are allocation minimums, not per-meal hard constraints.
-  return [];
+  const supported = normalizedSet(meal.dietaryCapabilities);
+  const counts = dietaryGuestCounts();
+  return state.constraints.map(constraint => {
+    const capability = String(constraint.dietaryCapability || constraint.requiredCapabilities?.[0] || constraint.id)
+      .trim().toLowerCase();
+    const guestCount = counts[capability] || 0;
+    if (!guestCount || supported.has(capability)) return null;
+    return { constraint, constraintLabel: constraint.label, capability, guestCount };
+  }).filter(Boolean);
 }
 
 function conflictSummary(conflicts) {
-  return conflicts.map(conflict => conflict.constraint?.label || conflict.constraintLabel).join(', ');
+  return conflicts.map(conflict => {
+    const label = conflict.constraint?.label || conflict.constraintLabel || humanize(conflict.capability);
+    return conflict.guestCount ? `${label} (${conflict.guestCount} guest${conflict.guestCount === 1 ? '' : 's'})` : label;
+  }).join(', ');
 }
 
 function serverConflictDetails(conflict) {
   const parts = [];
   if (conflict.missingRequiredCapabilities?.length) {
-    parts.push(`does not meet ${conflict.missingRequiredCapabilities.map(humanize).join(', ')}`);
+    parts.push(`does not provide ${conflict.missingRequiredCapabilities.map(humanize).join(', ')} coverage`);
   }
   if (conflict.excludedCapabilities?.length) {
     parts.push(`has excluded ${conflict.excludedCapabilities.map(humanize).join(', ')}`);
@@ -670,10 +723,11 @@ function renderConstraintWarningSummary(conflicts) {
     return;
   }
   const guaranteed = conflicts.filter(conflict => conflict.guaranteed);
+  const affectedMealCount = new Set(guaranteed.map(conflict => conflict.mealId)).size;
   target.innerHTML = `
-    <strong>⚠ ${conflicts.length} dietary constraint exception${conflicts.length === 1 ? '' : 's'} in this plan</strong>
-    <p>${guaranteed.length
-      ? `${guaranteed.length} exception${guaranteed.length === 1 ? '' : 's'} come from dishes you explicitly guaranteed. They remain in the plan, but should be reviewed before service.`
+    <strong>⚠ ${affectedMealCount || conflicts.length} pinned dish${(affectedMealCount || conflicts.length) === 1 ? '' : 'es'} need dietary review</strong>
+    <p>${affectedMealCount
+      ? `${affectedMealCount} selected dish${affectedMealCount === 1 ? '' : 'es'} do not satisfy one or more dietary needs you entered. They remain in the menu by request; the planner allocates compatible servings through the other dishes.`
       : 'Review the highlighted recipes before service.'}</p>
   `;
 }
@@ -1069,8 +1123,41 @@ function catalogScores(scores) {
   `;
 }
 
+function categoryMeta(id) {
+  const category = state.mealCategories.find(item => item.id === id);
+  return {
+    id,
+    label: category?.label || humanize(id),
+    icon: category?.icon || fallbackIcon('category', id)
+  };
+}
+
 function categoryLabel(id) {
-  return state.mealCategories.find(category => category.id === id)?.label || humanize(id);
+  return categoryMeta(id).label;
+}
+
+function visualIcon(icon, className = 'visual-icon') {
+  const value = String(icon || '•').trim().slice(0, 4);
+  return `<span class="${escapeHtml(className)}" aria-hidden="true">${escapeHtml(value)}</span>`;
+}
+
+function fallbackIcon(kind, id) {
+  const key = String(id || '').toLowerCase();
+  const icons = {
+    event: {
+      'business-apero': '🥂', brunch: '🥞', 'coffee-break': '☕',
+      'team-lunch-buffet': '🍽️', 'vegan-reception': '🌿', 'swiss-breakfast': '🥐'
+    },
+    category: {
+      fruit: '🍓', bakery: '🥐', meat: '🍗', 'plant-based': '🌿',
+      breakfast: '🍳', lunch: '🍽️', reception: '🥂'
+    },
+    dietary: {
+      vegetarian: '🥬', vegan: '🌱', halal: 'H', 'gluten-free': 'GF',
+      'lactose-free': 'LF', 'nut-free': 'NF'
+    }
+  };
+  return icons[kind]?.[key] || (kind === 'event' ? '✦' : kind === 'category' ? '•' : '✓');
 }
 
 function normalizedSet(values) {

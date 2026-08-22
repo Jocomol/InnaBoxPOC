@@ -2,6 +2,7 @@ package ch.inabox.catering.service
 
 import ch.inabox.catering.model.AppliedDietaryConstraint
 import ch.inabox.catering.model.CustomerPreferences
+import ch.inabox.catering.model.ConstraintConflict
 import ch.inabox.catering.model.DietaryConstraintDefinition
 import ch.inabox.catering.model.EventSummary
 import ch.inabox.catering.model.EventTemplate
@@ -50,6 +51,11 @@ class PlannerEngine {
         val excludedMealIds = resolveExcludedMealIds(request.excludedMealIds, meals)
         val requiredMeals = resolveRequiredMeals(request.requiredMealIds, meals, constraints)
         val requiredMealsById = requiredMeals.associateBy { it.mealId }
+        val constraintConflicts = guaranteedDietaryConflicts(
+            requiredMeals = requiredMeals,
+            dietaryShares = dietaryShares,
+            selectedConstraints = selectedConstraints,
+        )
         val selectableMeals = meals.filterNot { normalizedMealId(it.mealId) in excludedMealIds }
         val warnings = mutableListOf<String>()
         val selectedMeals = mutableListOf<SelectedMeal>()
@@ -260,7 +266,7 @@ class PlannerEngine {
                 hardConstraints = constraints,
             ),
             selectedMeals = selectedMeals,
-            constraintConflicts = emptyList(),
+            constraintConflicts = constraintConflicts,
             fulfilledRequirements = fulfilledRequirements,
             ingredientRequirements = ingredientRequirements,
             shoppingItems = shoppingItems,
@@ -609,6 +615,53 @@ class PlannerEngine {
         requiredCapabilities = constraints.requiredCapabilities,
         required = false,
     )
+
+    private fun guaranteedDietaryConflicts(
+        requiredMeals: List<Meal>,
+        dietaryShares: Map<String, Double>,
+        selectedConstraints: List<DietaryConstraintDefinition>,
+    ): List<ConstraintConflict> {
+        val definitionsByCapability = selectedConstraints.mapNotNull { definition ->
+            dietaryCapability(definition)?.let { capability -> capability to definition }
+        }.toMap()
+
+        return requiredMeals
+            .sortedBy { it.mealId }
+            .flatMap { meal ->
+                val supported = normalizeCapabilities(meal.dietaryCapabilities)
+                dietaryShares
+                    .filterValues { it > 0.0 }
+                    .toSortedMap()
+                    .mapNotNull { (capability, _) ->
+                        if (capability in supported) return@mapNotNull null
+                        val definition = definitionsByCapability[capability]
+                        ConstraintConflict(
+                            mealId = meal.mealId,
+                            mealName = meal.name,
+                            constraintId = definition?.constraintId ?: capability,
+                            constraintLabel = definition?.label ?: humanize(capability),
+                            guaranteed = true,
+                            missingRequiredCapabilities = setOf(capability),
+                        )
+                    }
+            }
+    }
+
+    private fun dietaryCapability(definition: DietaryConstraintDefinition): String? =
+        definition.dietaryCapability
+            ?.trim()
+            ?.lowercase()
+            ?.takeIf { it.isNotBlank() }
+            ?: definition.requiredCapabilities
+                .map { it.trim().lowercase() }
+                .firstOrNull { it.isNotBlank() }
+
+    private fun humanize(value: String): String = value
+        .replace('-', ' ')
+        .replace('_', ' ')
+        .split(' ')
+        .filter { it.isNotBlank() }
+        .joinToString(" ") { word -> word.replaceFirstChar { it.uppercase() } }
 
     private fun resolveRequiredMeals(
         requestedIds: Set<String>,
