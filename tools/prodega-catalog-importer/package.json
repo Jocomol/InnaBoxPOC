@@ -1,0 +1,17 @@
+{
+  "name": "event-in-a-box-prodega-catalog-importer",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Standalone mock Prodega API to Event in a Box MongoDB catalog adapter.",
+  "scripts": {
+    "mock-api": "node src/mock-prodega-api.mjs",
+    "import": "node src/import-products.mjs",
+    "demo": "node src/demo.mjs",
+    "fixture-import": "node src/generate-from-fixture.mjs",
+    "test": "node test/import-products.test.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
