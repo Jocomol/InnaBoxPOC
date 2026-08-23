@@ -6,8 +6,8 @@
 <meta content="width=device-width, initial-scale=1, viewport-fit=cover" name="viewport"/>
 <meta content="Event in a Box — deterministic catering and shopping plan generator" name="description"/>
 <title>Event in a Box — Catering planner</title>
-<link href="styles.css?v=event-in-a-box-1" rel="stylesheet"/>
-<script defer="True" src="i18n.js?v=event-in-a-box-1"></script><script defer="True" src="app.js?v=event-in-a-box-1"></script></head>
+<link href="styles.css?v=shopping-cart-score-1" rel="stylesheet"/>
+<script defer="True" src="i18n.js?v=shopping-cart-score-1"></script><script defer="True" src="app.js?v=shopping-cart-score-1"></script></head>
 <body>
 <header class="site-header">
 <a class="brand" href="#planner-form">EVENT <span>IN A BOX</span></a>
@@ -145,9 +145,12 @@
 <div class="meal-grid" id="selected-meals"></div>
 </section>
 <section class="result-section">
-<div class="result-section-heading">
+<div class="result-section-heading shopping-result-heading">
+<div>
 <h3 data-i18n="results.shoppingList">Shopping list</h3>
 <p data-i18n="results.shoppingCopy">Required amounts are netted against stock before package rounding.</p>
+</div>
+<button class="secondary-button shopping-cart-preview-button" data-i18n="integration.shoppingCart.button" id="open-shopping-cart-preview" type="button">Preview shopping cart JSON</button>
 </div>
 <div class="table-wrap">
 <table>
@@ -264,6 +267,32 @@
 <div class="picker-results inventory-picker-results" id="inventory-picker-results"></div>
 </div>
 </dialog>
+
+<dialog class="meal-picker shopping-cart-preview" id="shopping-cart-preview">
+<div class="picker-shell">
+<div class="picker-header">
+<div>
+<p class="eyebrow" data-i18n="integration.shoppingCart.eyebrow">Mock webshop handoff</p>
+<h2 data-i18n="integration.shoppingCart.title">Shopping cart payload</h2>
+<p data-i18n="integration.shoppingCart.copy">Preview the deterministic product references and package quantities ready for a future retailer shopping-cart adapter.</p>
+</div>
+<button aria-label="Close shopping cart preview" class="icon-button" data-i18n-aria-label="integration.shoppingCart.close" id="close-shopping-cart-preview" type="button">×</button>
+</div>
+<div class="shopping-cart-preview-body">
+<div class="integration-note">
+<strong data-i18n="integration.shoppingCart.mockOnly">Mock integration</strong>
+<p data-i18n="integration.shoppingCart.privateApi">No request is sent from this PoC. A future retailer adapter will map these internal product references to the real webshop product IDs and cart API when that private contract is available.</p>
+</div>
+<pre aria-label="Mock shopping cart JSON" class="shopping-cart-json" data-i18n-aria-label="integration.shoppingCart.jsonAria" id="shopping-cart-json"></pre>
+<div aria-live="polite" class="menu-change-status shopping-cart-status" hidden id="shopping-cart-mock-status" role="status"></div>
+</div>
+<div class="picker-footer shopping-cart-footer">
+<button class="tertiary-button" data-i18n="integration.shoppingCart.copyJson" id="copy-shopping-cart-json" type="button">Copy JSON</button>
+<button class="primary-small-button" data-i18n="integration.shoppingCart.mockSend" id="mock-send-shopping-cart" type="button">Simulate cart handoff</button>
+</div>
+</div>
+</dialog>
+
 <footer><span data-i18n="footer.poc">EVENT IN A BOX POC</span><span data-i18n="footer.copy">Explainable by design · CHF pricing</span></footer>
 </body>
 </html>

@@ -61,6 +61,9 @@ const regenerateMenuButton = document.querySelector('#regenerate-menu');
 const menuChangeStatus = document.querySelector('#menu-change-status');
 const excludedMealsRoot = document.querySelector('#excluded-meals');
 const languageSelect = document.querySelector('#language-select');
+const shoppingCartPreview = document.querySelector('#shopping-cart-preview');
+const shoppingCartJson = document.querySelector('#shopping-cart-json');
+const shoppingCartMockStatus = document.querySelector('#shopping-cart-mock-status');
 
 let pickerDebounce;
 let inventoryPickerDebounce;
@@ -83,6 +86,7 @@ i18n.onLanguageChange(() => {
   }
   if (mealPicker.open) searchPickerMeals();
   if (inventoryPicker.open) searchInventoryConcepts();
+  if (shoppingCartPreview.open && state.currentPlan) renderShoppingCartPreview(state.currentPlan);
 });
 
 document.querySelector('#add-inventory').addEventListener('click', () => {
@@ -127,6 +131,19 @@ inventoryPicker.addEventListener('close', () => {
 });
 inventoryPicker.addEventListener('click', event => {
   if (event.target === inventoryPicker) closeInventoryPicker();
+});
+
+document.querySelector('#open-shopping-cart-preview').addEventListener('click', openShoppingCartPreview);
+document.querySelector('#close-shopping-cart-preview').addEventListener('click', closeShoppingCartPreview);
+document.querySelector('#copy-shopping-cart-json').addEventListener('click', copyShoppingCartJson);
+document.querySelector('#mock-send-shopping-cart').addEventListener('click', mockSendToShoppingCart);
+shoppingCartPreview.addEventListener('close', () => {
+  shoppingCartMockStatus.hidden = true;
+  shoppingCartMockStatus.textContent = '';
+  document.body.classList.remove('dialog-open');
+});
+shoppingCartPreview.addEventListener('click', event => {
+  if (event.target === shoppingCartPreview) closeShoppingCartPreview();
 });
 
 developerTools.addEventListener('toggle', () => {
@@ -805,7 +822,11 @@ function renderMeals(meals, conflicts) {
             ${isPinned ? `<br><span class="guaranteed-badge">${escapeHtml(t('dishes.pinned'))}</span>` : ''}
             ${mealConflicts.length ? `<span class="conflict-badge">${escapeHtml(t('dishes.constraintException'))}</span>` : ''}
           </div>
-          <span class="score" title="${escapeHtml(t('results.weightedScore'))}">${Math.round(meal.finalWeightedScore * 100)}</span>
+          <span class="score" title="${escapeHtml(t('results.weightedScore'))}">
+            <small>${escapeHtml(t('results.scoreLabel'))}</small>
+            <strong>${Math.round(meal.finalWeightedScore * 100)}</strong>
+            <em>/ 100</em>
+          </span>
         </div>
         <div class="meal-actions" role="group" aria-label="Actions for ${escapeHtml(meal.name)}">
           <button class="meal-pin" type="button" data-pin-meal-id="${escapeHtml(meal.mealId)}"
@@ -824,7 +845,16 @@ function renderMeals(meals, conflicts) {
           ${(meal.matchedCapabilities || []).map(capability => `<span class="chip">${dynamic(humanize(capability), 'capability')}</span>`).join('')}
           ${(meal.matchedDietaryCapabilities || []).map(capability => `<span class="chip dietary">${dynamic(humanize(capability), 'dietary-label')}</span>`).join('')}
         </div>
-        <div class="meal-meta"><span>${escapeHtml(t('results.servings', { count: meal.servings }))}</span><span>${escapeHtml(t('results.target', { quantity: quantity(meal.targetQuantity) }))}</span></div>
+        <div class="meal-meta">
+          <div class="meal-stat">
+            <span>${escapeHtml(t('results.servingsLabel'))}</span>
+            <strong>${i18n.formatNumber(meal.servings)}</strong>
+          </div>
+          <div class="meal-stat">
+            <span>${escapeHtml(mealTargetLabel(meal.targetQuantity))}</span>
+            <strong>${escapeHtml(quantity(meal.targetQuantity))}</strong>
+          </div>
+        </div>
         <details class="score-details">
           <summary>${escapeHtml(t('dishes.why'))}</summary>
           <div class="score-components">${priorityEntries(meal.scoreComponents).map(([key, value]) =>
@@ -961,6 +991,97 @@ function renderShoppingItems(items) {
       <td data-label="${escapeHtml(t('table.total'))}"><strong>${formatMoney(item.lineTotal.amount)}</strong></td>
     </tr>
   `).join('');
+}
+
+function buildShoppingCartMockPayload(plan) {
+  const purchasableItems = (plan.shoppingItems || [])
+    .filter(item => Number(item.packageCount) > 0)
+    .map(item => ({
+      eventInABoxProductId: item.productId,
+      sku: item.sku,
+      packageCount: Number(item.packageCount)
+    }))
+    .sort((left, right) => left.eventInABoxProductId.localeCompare(right.eventInABoxProductId));
+
+  return {
+    schemaVersion: '1.0',
+    integration: 'shopping-cart',
+    mode: 'MOCK',
+    cartIntent: 'CREATE_OR_UPDATE_CART',
+    event: {
+      templateId: plan.event.templateId,
+      guestCount: plan.event.guestCount,
+      budget: {
+        amount: plan.event.budget?.amount ?? null,
+        currency: plan.event.budget?.currency || 'CHF'
+      }
+    },
+    items: purchasableItems,
+    totals: {
+      packageLines: purchasableItems.length,
+      packages: purchasableItems.reduce((sum, item) => sum + item.packageCount, 0),
+      plannedCost: {
+        amount: plan.totals?.totalCost?.amount ?? null,
+        currency: plan.totals?.totalCost?.currency || 'CHF'
+      }
+    },
+    integrationNote: 'Mock contract only. A retailer-specific adapter must map Event in a Box product IDs/SKUs to the external webshop product identifiers and cart API.'
+  };
+}
+
+function renderShoppingCartPreview(plan) {
+  shoppingCartJson.textContent = JSON.stringify(buildShoppingCartMockPayload(plan), null, 2);
+}
+
+function openShoppingCartPreview() {
+  if (!state.currentPlan) {
+    showError(t('integration.shoppingCart.noPlan'));
+    return;
+  }
+  renderShoppingCartPreview(state.currentPlan);
+  if (state.planIsStale) {
+    shoppingCartMockStatus.textContent = t('integration.shoppingCart.stale');
+    shoppingCartMockStatus.hidden = false;
+  } else {
+    shoppingCartMockStatus.hidden = true;
+    shoppingCartMockStatus.textContent = '';
+  }
+  if (typeof shoppingCartPreview.showModal === 'function') shoppingCartPreview.showModal();
+  else shoppingCartPreview.setAttribute('open', '');
+  document.body.classList.add('dialog-open');
+}
+
+function closeShoppingCartPreview() {
+  if (typeof shoppingCartPreview.close === 'function' && shoppingCartPreview.open) shoppingCartPreview.close();
+  else shoppingCartPreview.removeAttribute('open');
+  document.body.classList.remove('dialog-open');
+}
+
+async function copyShoppingCartJson() {
+  const json = shoppingCartJson.textContent || '';
+  try {
+    await navigator.clipboard.writeText(json);
+    shoppingCartMockStatus.textContent = t('integration.shoppingCart.copied');
+  } catch (_) {
+    shoppingCartMockStatus.textContent = t('integration.shoppingCart.copyFailed');
+  }
+  shoppingCartMockStatus.hidden = false;
+}
+
+function mockSendToShoppingCart() {
+  if (!state.currentPlan) return;
+  if (state.planIsStale) {
+    shoppingCartMockStatus.textContent = t('integration.shoppingCart.stale');
+    shoppingCartMockStatus.hidden = false;
+    return;
+  }
+  const payload = buildShoppingCartMockPayload(state.currentPlan);
+  shoppingCartMockStatus.textContent = t(
+    payload.items.length === 1 ? 'integration.shoppingCart.mockSent.one' : 'integration.shoppingCart.mockSent.many',
+    { count: payload.items.length }
+  );
+  shoppingCartMockStatus.hidden = false;
+  console.info('Event in a Box — mock shopping cart payload', payload);
 }
 
 function renderInventory(items) {
@@ -1218,6 +1339,11 @@ function showError(message) { errorBox.textContent = message; errorBox.hidden = 
 function hideError() { errorBox.hidden = true; errorBox.textContent = ''; }
 function formatMoney(value) { return i18n.formatMoney(Number(value), 'CHF'); }
 function formatAmount(value) { return i18n.formatNumber(Number(value), { maximumFractionDigits: 3 }); }
+function mealTargetLabel(value) {
+  const unit = String(value?.unit || '').trim().toLowerCase();
+  if (['piece', 'pieces', 'pcs', 'pc'].includes(unit)) return t('results.piecesLabel');
+  return t('results.targetLabel');
+}
 function quantity(value) { return `${i18n.formatNumber(Number(value.amount), { maximumFractionDigits: 3 })} ${i18n.unitLabel(value.unit, value.amount)}`; }
 function humanize(value) { return String(value ?? '').replace(/([a-z])([A-Z])/g, '$1 $2').replaceAll('-', ' ').replace(/\b\w/g, letter => letter.toUpperCase()); }
 function clamp(value, minimum, maximum) { return Math.min(maximum, Math.max(minimum, value)); }

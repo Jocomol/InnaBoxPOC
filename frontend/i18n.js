@@ -100,6 +100,10 @@
       'results.target': '{quantity} target',
       'results.scoreComponents': 'Score components',
       'results.weightedScore': 'Weighted score',
+      'results.scoreLabel': 'Score',
+      'results.servingsLabel': 'Servings',
+      'results.piecesLabel': 'Pieces',
+      'results.targetLabel': 'Target',
       'results.noStockMatched': 'No existing inventory matched this plan.',
       'results.notFulfilled': 'Not fulfilled',
       'results.covered': 'Covered',
@@ -266,6 +270,10 @@
       'results.target': '{quantity} Zielmenge',
       'results.scoreComponents': 'Bewertungskomponenten',
       'results.weightedScore': 'Gewichtete Bewertung',
+      'results.scoreLabel': 'Bewertung',
+      'results.servingsLabel': 'Portionen',
+      'results.piecesLabel': 'Stück',
+      'results.targetLabel': 'Zielmenge',
       'results.noStockMatched': 'Kein vorhandener Bestand wurde diesem Plan zugeordnet.',
       'results.notFulfilled': 'Nicht erfüllt',
       'results.covered': 'Abgedeckt',
@@ -432,6 +440,10 @@
       'results.target': 'objectif {quantity}',
       'results.scoreComponents': 'Composantes du score',
       'results.weightedScore': 'Score pondéré',
+      'results.scoreLabel': 'Score',
+      'results.servingsLabel': 'Portions',
+      'results.piecesLabel': 'Pièces',
+      'results.targetLabel': 'Objectif',
       'results.noStockMatched': "Aucun stock existant n'a été utilisé pour ce plan.",
       'results.notFulfilled': 'Non satisfait',
       'results.covered': 'Couvert',
@@ -598,6 +610,10 @@
       'results.target': 'obiettivo {quantity}',
       'results.scoreComponents': 'Componenti del punteggio',
       'results.weightedScore': 'Punteggio ponderato',
+      'results.scoreLabel': 'Punteggio',
+      'results.servingsLabel': 'Porzioni',
+      'results.piecesLabel': 'Pezzi',
+      'results.targetLabel': 'Obiettivo',
       'results.noStockMatched': 'Nessuna scorta esistente è stata utilizzata per questo piano.',
       'results.notFulfilled': 'Non soddisfatto',
       'results.covered': 'Coperto',
@@ -1206,6 +1222,83 @@
       }
     });
   }
+
+
+  Object.assign(messages.en, {
+    'integration.shoppingCart.button': 'Preview shopping cart JSON',
+    'integration.shoppingCart.eyebrow': 'Mock webshop handoff',
+    'integration.shoppingCart.title': 'Shopping cart payload',
+    'integration.shoppingCart.copy': 'Preview the deterministic product references and package quantities ready for a future retailer shopping-cart adapter.',
+    'integration.shoppingCart.mockOnly': 'Mock integration',
+    'integration.shoppingCart.privateApi': 'No request is sent from this PoC. A future retailer adapter will map these internal product references to the real webshop product IDs and cart API when that private contract is available.',
+    'integration.shoppingCart.close': 'Close shopping cart preview',
+    'integration.shoppingCart.jsonAria': 'Mock shopping cart JSON',
+    'integration.shoppingCart.copyJson': 'Copy JSON',
+    'integration.shoppingCart.copied': 'JSON copied to the clipboard.',
+    'integration.shoppingCart.copyFailed': 'Could not copy automatically. Select the JSON and copy it manually.',
+    'integration.shoppingCart.mockSend': 'Simulate cart handoff',
+    'integration.shoppingCart.mockSent.one': 'Mock complete: 1 shopping line is ready for a retailer cart handoff.',
+    'integration.shoppingCart.mockSent.many': 'Mock complete: {count} shopping lines are ready for a retailer cart handoff.',
+    'integration.shoppingCart.noPlan': 'Generate a plan before previewing the shopping cart payload.',
+    'integration.shoppingCart.stale': 'The menu has changed. Regenerate the plan before handing off the shopping cart payload.'
+  });
+
+  Object.assign(messages.de, {
+    'integration.shoppingCart.button': 'Warenkorb als JSON anzeigen',
+    'integration.shoppingCart.eyebrow': 'Mock-Übergabe an den Webshop',
+    'integration.shoppingCart.title': 'Warenkorb-Payload',
+    'integration.shoppingCart.copy': 'Zeigt die deterministisch ermittelten Produktreferenzen und Paketmengen für eine zukünftige Warenkorb-Anbindung an einen Händler-Webshop.',
+    'integration.shoppingCart.mockOnly': 'Mock-Integration',
+    'integration.shoppingCart.privateApi': 'Dieses PoC sendet keine Anfrage. Ein zukünftiger Händler-Adapter ordnet die internen Produktreferenzen den echten Webshop-Produkt-IDs und der privaten Warenkorb-API zu.',
+    'integration.shoppingCart.close': 'Warenkorb-Vorschau schliessen',
+    'integration.shoppingCart.jsonAria': 'Mock-JSON für den Warenkorb',
+    'integration.shoppingCart.copyJson': 'JSON kopieren',
+    'integration.shoppingCart.copied': 'JSON wurde in die Zwischenablage kopiert.',
+    'integration.shoppingCart.copyFailed': 'Automatisches Kopieren fehlgeschlagen. JSON bitte markieren und manuell kopieren.',
+    'integration.shoppingCart.mockSend': 'Warenkorb-Übergabe simulieren',
+    'integration.shoppingCart.mockSent.one': 'Mock abgeschlossen: 1 Einkaufsposition ist für die Warenkorb-Übergabe bereit.',
+    'integration.shoppingCart.mockSent.many': 'Mock abgeschlossen: {count} Einkaufspositionen sind für die Warenkorb-Übergabe bereit.',
+    'integration.shoppingCart.noPlan': 'Zuerst einen Plan erstellen, bevor der Warenkorb als JSON angezeigt wird.',
+    'integration.shoppingCart.stale': 'Das Menü wurde geändert. Bitte den Plan neu berechnen, bevor der Warenkorb übergeben wird.'
+  });
+
+  Object.assign(messages.fr, {
+    'integration.shoppingCart.button': 'Afficher le panier en JSON',
+    'integration.shoppingCart.eyebrow': 'Transmission simulée à la boutique',
+    'integration.shoppingCart.title': 'Payload du panier',
+    'integration.shoppingCart.copy': 'Affiche les références produit et quantités de colis calculées de manière déterministe pour une future intégration au panier d’un distributeur.',
+    'integration.shoppingCart.mockOnly': 'Intégration simulée',
+    'integration.shoppingCart.privateApi': 'Aucune requête n’est envoyée depuis ce PoC. Un futur adaptateur distributeur fera correspondre les références internes aux vrais identifiants produit et à l’API privée du panier.',
+    'integration.shoppingCart.close': 'Fermer l’aperçu du panier',
+    'integration.shoppingCart.jsonAria': 'JSON simulé du panier',
+    'integration.shoppingCart.copyJson': 'Copier le JSON',
+    'integration.shoppingCart.copied': 'JSON copié dans le presse-papiers.',
+    'integration.shoppingCart.copyFailed': 'La copie automatique a échoué. Sélectionnez le JSON et copiez-le manuellement.',
+    'integration.shoppingCart.mockSend': 'Simuler le transfert au panier',
+    'integration.shoppingCart.mockSent.one': 'Simulation terminée : 1 ligne d’achat est prête pour le transfert au panier.',
+    'integration.shoppingCart.mockSent.many': 'Simulation terminée : {count} lignes d’achat sont prêtes pour le transfert au panier.',
+    'integration.shoppingCart.noPlan': 'Générez d’abord un plan avant d’afficher le payload du panier.',
+    'integration.shoppingCart.stale': 'Le menu a été modifié. Recalculez le plan avant de transférer le panier.'
+  });
+
+  Object.assign(messages.it, {
+    'integration.shoppingCart.button': 'Mostra il carrello in JSON',
+    'integration.shoppingCart.eyebrow': 'Passaggio simulato al webshop',
+    'integration.shoppingCart.title': 'Payload del carrello',
+    'integration.shoppingCart.copy': 'Mostra i riferimenti prodotto e le quantità delle confezioni calcolati in modo deterministico per una futura integrazione con il carrello del rivenditore.',
+    'integration.shoppingCart.mockOnly': 'Integrazione simulata',
+    'integration.shoppingCart.privateApi': 'Questo PoC non invia alcuna richiesta. Un futuro adattatore del rivenditore mapperà i riferimenti interni agli ID prodotto reali e all’API privata del carrello.',
+    'integration.shoppingCart.close': 'Chiudi anteprima carrello',
+    'integration.shoppingCart.jsonAria': 'JSON simulato del carrello',
+    'integration.shoppingCart.copyJson': 'Copia JSON',
+    'integration.shoppingCart.copied': 'JSON copiato negli appunti.',
+    'integration.shoppingCart.copyFailed': 'Copia automatica non riuscita. Seleziona il JSON e copialo manualmente.',
+    'integration.shoppingCart.mockSend': 'Simula passaggio al carrello',
+    'integration.shoppingCart.mockSent.one': 'Simulazione completata: 1 riga di acquisto è pronta per il passaggio al carrello.',
+    'integration.shoppingCart.mockSent.many': 'Simulazione completata: {count} righe di acquisto sono pronte per il passaggio al carrello.',
+    'integration.shoppingCart.noPlan': 'Genera prima un piano per visualizzare il payload del carrello.',
+    'integration.shoppingCart.stale': 'Il menu è stato modificato. Ricalcola il piano prima di trasferire il carrello.'
+  });
 
 
   function cachedTranslation(text, context = 'generic') {
