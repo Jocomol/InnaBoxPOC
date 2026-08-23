@@ -1,0 +1,64 @@
+{
+  "products": [
+    {
+      "productId": "P-MOCK-1001",
+      "articleNumber": "7610001001",
+      "displayName": "Swiss Mozzarella 1 kg",
+      "ingredientConcept": "mozzarella",
+      "countryOfOrigin": "CH",
+      "pack": { "quantity": 1, "unit": "KG" },
+      "salesPrice": { "gross": 9.8, "currency": "CHF" },
+      "tags": ["chilled", "ready-to-use"],
+      "dietaryClaims": ["vegetarian", "gluten-free", "nut-free"],
+      "sustainabilityGrade": "B"
+    },
+    {
+      "productId": "P-MOCK-1002",
+      "articleNumber": "7610001002",
+      "displayName": "Falafel 50 pieces",
+      "ingredientConcept": "falafel",
+      "countryOfOrigin": "NL",
+      "pack": { "quantity": 50, "unit": "PCS" },
+      "salesPrice": { "gross": 21.5, "currency": "CHF" },
+      "tags": ["finger-food", "ready-to-heat", "frozen"],
+      "dietaryClaims": ["vegan", "vegetarian", "halal", "lactose-free", "nut-free"],
+      "sustainabilityGrade": "A"
+    },
+    {
+      "productId": "P-MOCK-1003",
+      "articleNumber": "7610001003",
+      "displayName": "Swiss Apple Juice 6 L",
+      "ingredientConcept": "apple-juice",
+      "countryOfOrigin": "CH",
+      "pack": { "quantity": 6, "unit": "L" },
+      "salesPrice": { "gross": 14.9, "currency": "CHF" },
+      "tags": ["non-alcoholic-drink", "juice", "ready-to-serve"],
+      "dietaryClaims": ["vegan", "vegetarian", "gluten-free", "lactose-free", "nut-free"],
+      "sustainabilityGrade": "A"
+    },
+    {
+      "productId": "P-MOCK-1004",
+      "articleNumber": "7610001004",
+      "displayName": "Certified Halal Chicken Skewers 40 pieces",
+      "ingredientConcept": "halal-chicken-skewer",
+      "countryOfOrigin": "FR",
+      "pack": { "quantity": 40, "unit": "PCS" },
+      "salesPrice": { "gross": 34.9, "currency": "CHF" },
+      "tags": ["finger-food", "ready-to-heat", "frozen"],
+      "dietaryClaims": ["halal", "gluten-free", "lactose-free", "nut-free"],
+      "sustainabilityGrade": "C"
+    },
+    {
+      "productId": "P-MOCK-1005",
+      "articleNumber": "7610001005",
+      "displayName": "Swiss Mineral Water 6 x 1.5 L",
+      "ingredientConcept": "water",
+      "countryOfOrigin": "CH",
+      "pack": { "quantity": 9, "unit": "L" },
+      "salesPrice": { "gross": 8.9, "currency": "CHF" },
+      "tags": ["non-alcoholic-drink", "water", "ready-to-serve"],
+      "dietaryClaims": ["vegan", "vegetarian", "halal", "gluten-free", "lactose-free", "nut-free"],
+      "sustainabilityGrade": "B"
+    }
+  ]
+}

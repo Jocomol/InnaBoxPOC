@@ -1461,3 +1461,33 @@ flowchart LR
 ```
 
 The retailer remains the source of purchasable products and the destination for checkout. Event in a Box provides the intelligence in between: **turning an event into an explainable, quantity-correct selection from that product palette.**
+
+
+## Mock Prodega catalog importer
+
+A standalone mock product importer is available in:
+
+```text
+tools/prodega-catalog-importer/
+```
+
+Because the real Prodega API is private, this tool demonstrates the complete product-import workflow using mock API data:
+
+```text
+Mock product API → normalization and validation → MongoDB entries → shopping cart
+```
+
+Run the demonstration with:
+
+```bash
+cd tools/prodega-catalog-importer
+npm run demo
+```
+
+The generated MongoDB files are saved in:
+
+```text
+tools/prodega-catalog-importer/output/
+```
+
+More information is available in the [importer README](tools/prodega-catalog-importer/README.md).
